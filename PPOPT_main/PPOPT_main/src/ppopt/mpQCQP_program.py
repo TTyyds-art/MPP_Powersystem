@@ -873,7 +873,7 @@ class MPQCQP_Program():
         # 因为mu_ 是vector，所以mu_[:nb]可以取值，它和单列的向量是不一样的。
         model.addConstr(muu_.T[:nb]@R_G_Us + muu_.T[nb:]@-R_G_Ws==mu_dG_dU, name='μ.T x dG/dU')  # I{G^s_U} = -R{G^s_W}
         model.addConstr(muu_.T[:nb]@R_G_Ws + muu_.T[nb:]@R_G_Us==mu_dG_dW, name='μ.T x dG/dW')   # I{G^s_W} = R{G^s_U}
-        # model.addConstr(muu_.T[:nb]@-Cg + muu_.T[nb:]@zeros(nb,len(Pg_upper))==mu_dG_dPg, name='μ.T x dG/dPg')
+        model.addConstr(muu_.T[:nb]@-Cg + muu_.T[nb:]@zeros(nb,len(Pg_upper))==mu_dG_dPg, name='μ.T x dG/dPg')   # 注释了这句话！！
         model.addConstr(muu_.T[:nb]@zeros(nb,len(Pg_upper)) + muu_.T[nb:]@-Cg==mu_dG_dQg, name='μ.T x dG/dQg')
 
         # 下面两式的每一行就是一条线路（分别对应实部和虚部），选择约束时只需要用 H[i]，选择某一条线路即可，用for循环处理
@@ -1070,10 +1070,14 @@ class MPQCQP_Program():
                 'theta': Pd.X,  # 要设置成变量
                 'mu': muu_.X,
                 'lambda': [lambda_Vmax.X, lambda_Vmin.X, lambda_F.X, lambda_T.X, lambda_PGmax.X, lambda_PGmin.X],
-                'slack': s_j,
+                # 'slack': s_j, # 如果还是显示*Awaiting Model update, 就需要考虑是否没有用到这些约束！
+                'F_Pg': F_Pg.tolist(),
+                'mu_dG_dPg': mu_dG_dPg.X,
+                'lambda_dH_dPg': lambda_dH_dPg.T.X,
+                'slack_ele': [s_j[0].X, s_j[1].X, s_j[2].X, s_j[3].X, s_j[4].X, s_j[5].X, s_j[6].X, s_j[7].X, s_j[8].X, s_j[9].X, s_j[10].X, s_j[11].X ],
                 't': t.X,
                 'equality_indices': active_set
-            }
+            } # F_Pg + mu_dG_dPg.T + lambda_dH_dPg.T == 0
             return sol
 
 # my_QCQP = MPQCQP_Program(net=None)

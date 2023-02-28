@@ -1,9 +1,12 @@
 import sys, os
 import time
-from pathos.multiprocessing import ProcessingPool as Pool
+# from pathos.multiprocessing import ProcessingPool as Pool
+
+from multiprocessing.pool import ThreadPool as Pool
 # from multiprocessing import Pool
 from random import shuffle
 from typing import List
+import dill
 
 path_current = '/home/ubuntu-h/PycharmProjects/scientificProject'
 path_ = os.getcwd()
@@ -141,7 +144,7 @@ num_cores = num_cpu_cores()
 
 print(f'Spawned threads across {num_cores}')
 
-pool = Pool(1)
+pool = Pool(8)
 
 murder_list = CombinationTester()
 to_check = list()

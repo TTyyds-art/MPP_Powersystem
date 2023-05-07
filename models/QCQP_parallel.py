@@ -1,12 +1,10 @@
 import sys, os
 import time
-# from pathos.multiprocessing import ProcessingPool as Pool
-
-from multiprocessing.pool import ThreadPool as Pool
+from pathos.multiprocessing import ProcessingPool as Pool
 # from multiprocessing import Pool
+from multiprocessing.pool import ThreadPool as Pool
 from random import shuffle
 from typing import List
-import dill
 
 path_current = '/home/ubuntu-h/PycharmProjects/scientificProject'
 path_ = os.getcwd()
@@ -38,13 +36,13 @@ pp.create_line(net, bus2, bus3, length_km=90., std_type='149-AL1/24-ST1A 110.0')
 pp.create_line(net, bus1, bus2, length_km=70., std_type='149-AL1/24-ST1A 110.0')
 
 # create loads
-pp.create_load(net, bus2, p_mw=60., controllable=False)
+pp.create_load(net, bus2, p_mw=50., controllable=False)
 # pp.create_load(net, bus3, p_mw=70., controllable=False)
 # pp.create_load(net, bus4, p_mw=25., controllable=False)
 
 # create generators
 eg = pp.create_ext_grid(net, bus1, min_p_mw=0, max_p_mw=1000, vm_pu=1.05)
-g0 = pp.create_gen(net, bus3, p_mw=80, min_p_mw=0, max_p_mw=80, vm_pu=1.00, controllable=True)
+g0 = pp.create_gen(net, bus3, p_mw=50, min_p_mw=0, max_p_mw=50, vm_pu=1.00, controllable=True)
 # g1 = pp.create_gen(net, bus4, p_mw=50, min_p_mw=0, max_p_mw=50, vm_pu=1.00, controllable=True)
 
 
@@ -144,7 +142,7 @@ num_cores = num_cpu_cores()
 
 print(f'Spawned threads across {num_cores}')
 
-pool = Pool(8)
+pool = Pool(32)  # to 64, compare the time consumption TODO
 
 murder_list = CombinationTester()
 to_check = list()
@@ -203,15 +201,15 @@ for i in range(max_depth):
         break
 
 # we never actually tested the program base active set
-if program.check_feasibility(program.equality_indices):
-    sol_ = program.check_optimality(program.equality_indices)
-    if sol_:
-        save.append(sol_) # 已经将CR改成sol_了，所以放到save中
-        # region = gen_cr_from_active_set(program, program.equality_indices)
-        # if region is not None:
-        #     solution.add_region(region)
+# if program.check_feasibility(program.equality_indices):
+#     sol_ = program.check_optimality(program.equality_indices)
+#     if sol_:
+#         save.append(sol_) # 已经将CR改成sol_了，所以放到save中
+#         # region = gen_cr_from_active_set(program, program.equality_indices)
+#         # if region is not None:
+#         #     solution.add_region(region)
 
-pool.clear()
+pool.close()
 
 end_time = time.time()
 print("耗时: {:.2f}秒".format(end_time - start))

@@ -4,7 +4,7 @@ import numpy
 
 from .chebyshev_ball import chebyshev_ball
 from ..critical_region import CriticalRegion
-from ..mpqp_program import MPQP_Program
+from ..mpQCQP_program import MPQCQP_Program
 from ..solver import Solver
 from ..utils.constraint_utilities import cheap_remove_redundant_constraints, remove_duplicate_rows, \
     scale_constraint
@@ -46,7 +46,7 @@ def get_boundary_types(region: numpy.ndarray, omega: numpy.ndarray, lagrange: nu
     return [omega_list, lagrange_list, regular_list]
 
 
-def build_suboptimal_critical_region(program: MPQP_Program, active_set: List[int]):
+def build_suboptimal_critical_region(program: MPQCQP_Program, active_set: List[int]):
     """
     Builds the critical region without considering culling facets or any other operation.
     Primary uses for this is based on culling lower dimensional feasible sets.
@@ -79,8 +79,8 @@ def build_suboptimal_critical_region(program: MPQP_Program, active_set: List[int
     return region_A, region_b
 
 
-# noinspection PyUnusedLocal
-def gen_cr_from_active_set(program: MPQP_Program, active_set: List[int], check_full_dim=True) -> Optional[
+# noinspection PyUnusedLocal TODO 19.22.29 使这部分能工作；
+def gen_cr_from_active_set(program: MPQCQP_Program, active_set: List[int], check_full_dim=True) -> Optional[
     CriticalRegion]:
     """
     Builds the critical region of the given mpqp from the active set.
@@ -93,17 +93,17 @@ def gen_cr_from_active_set(program: MPQP_Program, active_set: List[int], check_f
 
     num_equality = program.num_equality_constraints()
 
-    inactive = [i for i in range(program.num_constraints()) if i not in active_set]
-
+    # 这里的lagrange_A对应激活的不等式约束和等式约束
+    inactive = [i for i in range(program.num_inequality_constraints()) if i not in active_set]
     parameter_A, parameter_b, lagrange_A, lagrange_b = program.optimal_control_law(active_set)
 
-    # lagrange constraints
-    lambda_A, lambda_b = -lagrange_A[num_equality:], lagrange_b[num_equality:]
+    #
+    lambda_A, lambda_b = -lagrange_A[num_equality:], lagrange_b[num_equality:]  #
 
-    # Theta Constraints
+    # Theta(loads) Constraints
     omega_A, omega_b = program.A_t, program.b_t
 
-    # Inactive Constraints remain inactive
+    # Inactive Constraints remain inactive; 这里的 program.A/b 都是不等式约束，没有等式约束
     inactive_A = program.A[inactive] @ parameter_A - program.F[inactive]
     inactive_b = program.b[inactive] - program.A[inactive] @ parameter_b
 
@@ -120,15 +120,17 @@ def gen_cr_from_active_set(program: MPQP_Program, active_set: List[int], check_f
     inactive_bnz = inactive_b[ineq_nonzeros]
 
     CR_A = ppopt_block([[lambda_Anz], [inactive_Anz], [omega_A]])
-    CR_b = ppopt_block([[lambda_bnz], [inactive_bnz], [omega_b]])
+    CR_b = ppopt_block([[numpy.expand_dims(lambda_bnz, axis=1)], [numpy.expand_dims(inactive_bnz, axis=1)], [omega_b]]) #  使得每个matrix都是2D的
 
     CR_As, CR_bs = scale_constraint(CR_A, CR_b)
 
-    # if check_full_dim is set check if region is lower dimensional if so return None
-    if check_full_dim:
-        # if the resulting system is not fully dimensional return None
-        if not is_full_dimensional(CR_As, CR_bs, program.solver):
-            return None
+    # if check_full_dim is set check if region is lower dimensional if so return None TODO 21.11.06 这里的check_full_dim需要调整后才能用（后期）
+    # if check_full_dim:
+    #     # if the resulting system is not fully dimensional return None
+    #     A_temp = numpy.ones_like(CR_As)*10
+    #     b_temp = numpy.zeros_like(CR_bs) + numpy.ones_like(CR_bs)*0.2
+    #     if not is_full_dimensional(CR_As, CR_bs, program.solver):
+    #         return None
 
     # if it is fully dimensional we get to classify the constraints and then reduce them (important)!
 
@@ -164,13 +166,13 @@ def gen_cr_from_active_set(program: MPQP_Program, active_set: List[int], check_f
     CR_As = ppopt_block(
         [[lambda_Anz[kept_lambda_indices]], [inactive_Anz[kept_inequality_indices]], [omega_A[kept_omega_indices]]])
     CR_bs = ppopt_block(
-        [[lambda_bnz[kept_lambda_indices]], [inactive_bnz[kept_inequality_indices]], [omega_b[kept_omega_indices]]])
+        [[numpy.expand_dims(lambda_bnz[kept_lambda_indices], axis=1)], [numpy.expand_dims(inactive_bnz[kept_inequality_indices], axis=1)], [omega_b[kept_omega_indices]]])
 
     # recover the lambda boundaries that remain
-    relevant_lambda = [active_set[num_equality + index] for index in kept_lambda_indices]
+    relevant_lambda = [active_set[index] for index in kept_lambda_indices]
 
     real_regular = [inactive[index] for index in kept_inequality_indices]
-    regular = [kept_inequality_indices, real_regular]
+    regular = real_regular
 
     # remove any possible duplicate constraints
     # and rescale since we did not rescale this particular set of constraints!!!
@@ -181,7 +183,7 @@ def gen_cr_from_active_set(program: MPQP_Program, active_set: List[int], check_f
                           kept_omega_indices, relevant_lambda, regular)
 
 
-def is_full_dimensional(A, b, solver: Solver = Solver()):
+def is_full_dimensional(A, b, solver: Solver = None):
     """
     This checks the dimensionality of a polytope defined by P = {x: Ax≤b}. Current method is based on checking if the
     radii of the chebychev ball is nonzero. However, this is numerically not so stable, and will eventually be replaced
@@ -192,6 +194,9 @@ def is_full_dimensional(A, b, solver: Solver = Solver()):
     :param solver: the solver interface to direct the deterministic solver
     :return: True if polytope is fully dimensional else False
     """
+
+    if solver is None:
+        solver = Solver()
 
     # TODO: Add second chebychev ball to get a more accurate estimate of lower dimensionality
 

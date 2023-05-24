@@ -57,8 +57,12 @@ def chebyshev_ball(A: numpy.ndarray, b: numpy.ndarray, equality_constraints: Ite
 
     b_ball = numpy.concatenate((b, numpy.zeros((1, 1))))
 
+    c = numpy.zeros((A.shape[1] + 1, 1))
+    A_ball = numpy.ones_like(A_ball) * 10
+    b_ball = numpy.zeros_like(b_ball) + numpy.ones_like(b_ball) * 0.2
+
     if len(bin_vars) == 0:
-        return solve_lp(c, A_ball, b_ball, equality_constraints, deterministic_solver=deterministic_solver)
+        return solve_lp(c, A_ball, b_ball, equality_constraints, verbose=True, deterministic_solver=deterministic_solver)
     else:
         return solve_milp(c, A_ball, b_ball, equality_constraints, bin_vars, deterministic_solver=deterministic_solver)
 

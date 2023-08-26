@@ -1,0 +1,253 @@
+# -*- coding: utf-8 -*-
+
+# Copyright 1996-2015 PSERC. All rights reserved.
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file.
+
+# Copyright (c) 2016-2022 by University of Kassel and Fraunhofer Institute for Energy Economics
+# and Energy System Technology (IEE), Kassel. All rights reserved.
+
+
+"""Evaluates Hessian of Lagrangian for AC OPF.
+"""
+import torch
+from torch import tensor, zeros, ones, exp, arange, cat
+from pypower_pych_gpu.torch_utils import find
+from pypower_pych_gpu.torch_utils import vstack, hstack
+from pypower_pych_gpu.torch_utils import sparse, issparse
+
+from pypower_pych_gpu.csr_real_imag import csr_real, csr_imag, cr_real, cr_imag
+from pypower_pych_gpu.d2AIbr_dV2 import d2AIbr_dV2
+from pypower_pych_gpu.d2ASbr_dV2 import d2ASbr_dV2
+from pypower_pych_gpu.d2Sbus_dV2 import d2Sbus_dV2
+from pypower_pych_gpu.dIbr_dV import dIbr_dV
+from pypower_pych_gpu.dSbr_dV import dSbr_dV
+from pypower_pych_gpu.idx_brch import F_BUS, T_BUS
+from pypower_pych_gpu.idx_cost import MODEL, POLYNOMIAL
+from pypower_pych_gpu.idx_gen import PG, QG
+from pypower_pych_gpu.opf_consfcn import opf_consfcn
+from pypower_pych_gpu.opf_costfcn import opf_costfcn
+from pypower_pych_gpu.polycost import polycost
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+def opf_hessfcn(x, lmbda, pack_para, Ybus, Yf, Yt, ppopt, il=None, cost_mult=1.0):
+    """Evaluates Hessian of Lagrangian for AC OPF.
+
+    Hessian evaluation function for AC optimal power flow, suitable
+    for use with L{pips}.
+
+    Examples::
+        Lxx = opf_hessfcn(x, lmbda, om, Ybus, Yf, Yt, ppopt)
+        Lxx = opf_hessfcn(x, lmbda, om, Ybus, Yf, Yt, ppopt, il)
+        Lxx = opf_hessfcn(x, lmbda, om, Ybus, Yf, Yt, ppopt, il, cost_mult)
+
+    @param x: optimization vector
+    @param lmbda: C{eqnonlin} - Lagrange multipliers on power balance
+    equations. C{ineqnonlin} - Kuhn-Tucker multipliers on constrained
+    branch flows.
+    @param pack_para: ppc, baseMVA, bus, gen, branch, gencost, il, vv, nn, ny, cp
+    @param Ybus: bus admittance matrix
+    @param Yf: admittance matrix for "from" end of constrained branches
+    @param Yt: admittance matrix for "to" end of constrained branches
+    @param ppopt: PYPOWER options vector
+    @param il: (optional) vector of branch indices corresponding to
+    branches with flow limits (all others are assumed to be unconstrained).
+    The default is C{range(nl)} (all branches). C{Yf} and C{Yt} contain
+    only the rows corresponding to C{il}.
+    @param cost_mult: (optional) Scale factor to be applied to the cost
+    (default = 1).
+
+    @return: Hessian of the Lagrangian.
+
+    @see: L{opf_costfcn}, L{opf_consfcn}
+
+    @author: Ray Zimmerman (PSERC Cornell)
+    @author: Carlos E. Murillo-Sanchez (PSERC Cornell & Universidad
+    Autonoma de Manizales)
+    @author: Richard Lincoln
+
+    Modified by University of Kassel (Friederike Meier): Bugfix in line 173
+    """
+    ##----- initialize -----
+    ## unpack data
+    # ppc = om.get_ppc()
+    baseMVA, bus, gen, branch, gencost = pack_para[1], pack_para[2], pack_para[3], pack_para[4], pack_para[5]
+    vv = pack_para[7]
+    # cp = om.get_cost_params()
+    N, Cw, H, dd, rh, kk, mm = pack_para[10]
+    # vv, _, _, _ = om.get_idx()
+
+    ## unpack needed parameters
+    nb = bus.shape[0]          ## number of buses
+    nl = branch.shape[0]       ## number of branches
+    ng = gen.shape[0]          ## number of dispatchable injections
+    nxyz = len(x)              ## total number of control vars of all types
+
+    ## set default constrained lines
+    if il is None:
+        il = arange(nl).to(device)            ## all lines have limits by default
+    nl2 = len(il)         ## number of constrained lines
+
+    ## grab Pg & Qg
+    Pg = x[vv["i1"]["Pg"]:vv["iN"]["Pg"]]  ## active generation in p.u.
+    Qg = x[vv["i1"]["Qg"]:vv["iN"]["Qg"]]  ## reactive generation in p.u.
+
+    ## put Pg & Qg back in gen
+    gen[:, PG] = Pg * baseMVA  ## active generation in MW
+    gen[:, QG] = Qg * baseMVA  ## reactive generation in MVAr
+
+    ## reconstruct V
+    Va = x[vv["i1"]["Va"]:vv["iN"]["Va"]]
+    Vm = x[vv["i1"]["Vm"]:vv["iN"]["Vm"]]
+    V = Vm * exp(1j * Va)
+    nxtra = nxyz - 2 * nb
+    pcost = gencost[arange(ng).to(device), :]
+    if gencost.shape[0] > ng:
+        qcost = gencost[arange(ng, 2 * ng).to(device), :]
+    else:
+        qcost = tensor([], device=device)
+
+    ## ----- evaluate d2f -----
+    d2f_dPg2 = zeros(ng, dtype=torch.float64, device=device) #sparse((ng, 1))               ## w.r.t. p.u. Pg
+    d2f_dQg2 = zeros(ng, dtype=torch.float64, device=device) #sparse((ng, 1))               ## w.r.t. p.u. Qg
+    ipolp = find(pcost[:, MODEL] == POLYNOMIAL)
+    if len(ipolp): ##TODO check the device
+        d2f_dPg2[ipolp] = \
+            baseMVA**2 * polycost(pcost[ipolp, :], Pg[ipolp] * baseMVA, 2)
+    if qcost.any():          ## Qg is not free
+        ipolq = find(qcost[:, MODEL] == POLYNOMIAL)
+        d2f_dQg2[ipolq] = \
+                baseMVA**2 * polycost(qcost[ipolq, :], Qg[ipolq] * baseMVA, 2)
+    i = cat([arange(vv["i1"]["Pg"], vv["iN"]["Pg"]).to(device),
+           arange(vv["i1"]["Qg"], vv["iN"]["Qg"]).to(device)])
+#    d2f = sparse((vstack([d2f_dPg2, d2f_dQg2]).toarray().flatten(),
+#                  (i, i)), shape=(nxyz, nxyz))
+    d2f = sparse((cat([d2f_dPg2, d2f_dQg2]), (i, i)), (nxyz, nxyz))
+
+    ## generalized cost TODO: 没有转移到GPU上
+    if issparse(N) and N.nnz > 0: # pragma: no cover
+        nw = N.shape[0]
+        r = N * x - rh                    ## Nx - rhat
+        iLT = find(r < -kk)               ## below dead zone
+        iEQ = find((r == 0) & (kk == 0))  ## dead zone doesn't exist
+        iGT = find(r > kk)                ## above dead zone
+        iND = cat([iLT, iEQ, iGT])           ## rows that are Not in the Dead region
+        iL = find(dd == 1)                ## rows using linear function
+        iQ = find(dd == 2)                ## rows using quadratic function
+        LL = sparse((ones(len(iL), dtype=torch.float64, device=device), (iL, iL)), (nw, nw))
+        QQ = sparse((ones(len(iQ), dtype=torch.float64, device=device), (iQ, iQ)), (nw, nw))
+        kbar = sparse((cat([ones(len(iLT), dtype=torch.float64, device=device), zeros(len(iEQ), dtype=torch.float64, device=device), -ones(len(iGT), device=device)]),
+                       (iND, iND)), (nw, nw)) * kk
+        rr = r + kbar                  ## apply non-dead zone shift
+        M = sparse((mm[iND], (iND, iND)), (nw, nw))  ## dead zone or scale
+        diagrr = sparse((rr, (arange(nw).to(device), arange(nw).to(device))), (nw, nw))
+
+        ## linear rows multiplied by rr(i), quadratic rows by rr(i)^2
+        w = M * (LL + QQ * diagrr) * rr
+        HwC = H * w + Cw
+        AA = N.T * M * (LL + 2 * QQ * diagrr)
+
+        d2f = d2f + AA * H * AA.T + 2 * N.T * M * QQ * \
+                sparse((HwC, (arange(nw).to(device), arange(nw).to(device))), (nw, nw)) * N
+    d2f = d2f * cost_mult
+
+    ##----- evaluate Hessian of power balance constraints -----
+    nlam = len(lmbda["eqnonlin"]) // 2
+    lamP = lmbda["eqnonlin"][:nlam]
+    lamQ = lmbda["eqnonlin"][nlam:nlam + nlam]
+    Gpaa, Gpav, Gpva, Gpvv = d2Sbus_dV2(Ybus, V, lamP)
+    Gqaa, Gqav, Gqva, Gqvv = d2Sbus_dV2(Ybus, V, lamQ)
+
+    d2G = vstack([
+            hstack([
+                vstack([hstack([Gpaa, Gpav]),
+                        hstack([Gpva, Gpvv])]).real +
+
+                    vstack([hstack([Gqaa, Gqav]),
+                        hstack([Gqva, Gqvv])]).imag,
+                zeros((2 * nb, nxtra), dtype=torch.float64, device=device)]),
+            hstack([
+                zeros((nxtra, 2 * nb), dtype=torch.float64, device=device),
+                zeros((nxtra, nxtra), dtype=torch.float64, device=device)
+            ])
+        ], "csr")
+
+    ##----- evaluate Hessian of flow constraints -----
+    nmu = len(lmbda["ineqnonlin"]) // 2
+    muF = lmbda["ineqnonlin"][:nmu]
+    muT = lmbda["ineqnonlin"][nmu:nmu + nmu]
+    if ppopt['OPF_FLOW_LIM'] == 2:       ## current
+        if Yf.size:
+            dIf_dVa, dIf_dVm, dIt_dVa, dIt_dVm, If, It = dIbr_dV(branch, Yf, Yt, V)
+            Hfaa, Hfav, Hfva, Hfvv = d2AIbr_dV2(dIf_dVa, dIf_dVm, If, Yf, V, muF)
+            Htaa, Htav, Htva, Htvv = d2AIbr_dV2(dIt_dVa, dIt_dVm, It, Yt, V, muT)
+        else:
+            Hfaa= Hfav= Hfva= Hfvv= Htaa= Htav= Htva= Htvv = zeros((nb,nb), dtype=torch.float64, device=device).to_sparse(layout='csr')
+    else: # pragma: no cover
+        f = branch[il, F_BUS].astype(int)    ## list of "from" buses
+        t = branch[il, T_BUS].astype(int)    ## list of "to" buses
+        ## connection matrix for line & from buses
+        Cf = sparse((ones(nl2, dtype=torch.float64, device=device), (arange(nl2).to(device), f)), (nl2, nb))
+        ## connection matrix for line & to buses
+        Ct = sparse((ones(nl2, dtype=torch.float64, device=device), (arange(nl2).to(device), t)), (nl2, nb))
+        dSf_dVa, dSf_dVm, dSt_dVa, dSt_dVm, Sf, St = \
+                dSbr_dV(branch[il,:], Yf, Yt, V)
+        if ppopt['OPF_FLOW_LIM'] == 1:     ## real power
+
+            Hfaa, Hfav, Hfva, Hfvv = d2ASbr_dV2(dSf_dVa.real, dSf_dVm.real,
+                                                Sf.real, Cf, Yf, V, muF)
+            Htaa, Htav, Htva, Htvv = d2ASbr_dV2(dSt_dVa.real, dSt_dVm.real,
+                                                St.real, Ct, Yt, V, muT)
+        else:                  ## apparent power
+            Hfaa, Hfav, Hfva, Hfvv = \
+                    d2ASbr_dV2(dSf_dVa, dSf_dVm, Sf, Cf, Yf, V, muF)
+            Htaa, Htav, Htva, Htvv = \
+                    d2ASbr_dV2(dSt_dVa, dSt_dVm, St, Ct, Yt, V, muT)
+
+    d2H = vstack([
+            hstack([
+                vstack([hstack([Hfaa, Hfav]),
+				hstack([Hfva, Hfvv])]) +
+				vstack([hstack([Htaa, Htav]),
+                        hstack([Htva, Htvv])]),
+                zeros((2 * nb, nxtra), dtype=torch.float64, device=device)
+            ]),
+            hstack([
+                zeros((nxtra, 2 * nb), dtype=torch.float64, device=device),
+                zeros((nxtra, nxtra), dtype=torch.float64, device=device)
+            ])
+        ], "csr")
+
+    ##-----  do numerical check using (central) finite differences  -----
+    if 0:
+        nx = len(x)
+        step = 1e-5
+        num_d2f = sparse((nx, nx))
+        num_d2G = sparse((nx, nx))
+        num_d2H = sparse((nx, nx))
+        for i in range(nx):
+            xp = x
+            xm = x
+            xp[i] = x[i] + step / 2
+            xm[i] = x[i] - step / 2
+            # evaluate cost & gradients
+            _, dfp = opf_costfcn(xp, om)
+            _, dfm = opf_costfcn(xm, om)
+            # evaluate constraints & gradients
+            _, _, dHp, dGp = opf_consfcn(xp, om, Ybus, Yf, Yt, ppopt, il)
+            _, _, dHm, dGm = opf_consfcn(xm, om, Ybus, Yf, Yt, ppopt, il)
+            num_d2f[:, i] = cost_mult * (dfp - dfm) / step
+            num_d2G[:, i] = (dGp - dGm) * lmbda["eqnonlin"]   / step
+            num_d2H[:, i] = (dHp - dHm) * lmbda["ineqnonlin"] / step
+        d2f_err = max(max(abs(d2f - num_d2f)))
+        d2G_err = max(max(abs(d2G - num_d2G)))
+        d2H_err = max(max(abs(d2H - num_d2H)))
+        if d2f_err > 1e-6:
+            print('Max difference in d2f: %g' % d2f_err)
+        if d2G_err > 1e-5:
+            print('Max difference in d2G: %g' % d2G_err)
+        if d2H_err > 1e-6:
+            print('Max difference in d2H: %g' % d2H_err)
+
+    return d2f.to_dense() + d2G.to_dense() + d2H.to_dense()

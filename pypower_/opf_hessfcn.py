@@ -11,23 +11,24 @@
 """Evaluates Hessian of Lagrangian for AC OPF.
 """
 
-from numpy import array, zeros, ones, exp, arange, r_, flatnonzero as find
-from scipy.sparse import vstack, hstack, issparse, csr_matrix as sparse
+from cupy import array, zeros, ones, exp, arange, r_, flatnonzero as find
+from cupyx.scipy.sparse import vstack, hstack, issparse, csr_matrix as sparse
 
-from pandapower.pypower.d2AIbr_dV2 import d2AIbr_dV2
-from pandapower.pypower.d2ASbr_dV2 import d2ASbr_dV2
-from pandapower.pypower.d2Sbus_dV2 import d2Sbus_dV2
-from pandapower.pypower.dIbr_dV import dIbr_dV
-from pandapower.pypower.dSbr_dV import dSbr_dV
-from pandapower.pypower.idx_brch import F_BUS, T_BUS
-from pandapower.pypower.idx_cost import MODEL, POLYNOMIAL
-from pandapower.pypower.idx_gen import PG, QG
-from pandapower.pypower.opf_consfcn import opf_consfcn
-from pandapower.pypower.opf_costfcn import opf_costfcn
-from pandapower.pypower.polycost import polycost
+from pypower_.csr_real_imag import csr_real, csr_imag, cr_real, cr_imag
+from pypower_.d2AIbr_dV2 import d2AIbr_dV2
+from pypower_.d2ASbr_dV2 import d2ASbr_dV2
+from pypower_.d2Sbus_dV2 import d2Sbus_dV2
+from pypower_.dIbr_dV import dIbr_dV
+from pypower_.dSbr_dV import dSbr_dV
+from pypower_.idx_brch import F_BUS, T_BUS
+from pypower_.idx_cost import MODEL, POLYNOMIAL
+from pypower_.idx_gen import PG, QG
+from pypower_.opf_consfcn import opf_consfcn
+from pypower_.opf_costfcn import opf_costfcn
+from pypower_.polycost import polycost
 
 
-def opf_hessfcn(x, lmbda, om, Ybus, Yf, Yt, ppopt, il=None, cost_mult=1.0):
+def opf_hessfcn(x, lmbda, pack_para, Ybus, Yf, Yt, ppopt, il=None, cost_mult=1.0):
     """Evaluates Hessian of Lagrangian for AC OPF.
 
     Hessian evaluation function for AC optimal power flow, suitable
@@ -42,7 +43,7 @@ def opf_hessfcn(x, lmbda, om, Ybus, Yf, Yt, ppopt, il=None, cost_mult=1.0):
     @param lmbda: C{eqnonlin} - Lagrange multipliers on power balance
     equations. C{ineqnonlin} - Kuhn-Tucker multipliers on constrained
     branch flows.
-    @param om: OPF model object
+    @param pack_para: ppc, baseMVA, bus, gen, branch, gencost, il, vv, nn, ny, cp
     @param Ybus: bus admittance matrix
     @param Yf: admittance matrix for "from" end of constrained branches
     @param Yt: admittance matrix for "to" end of constrained branches
@@ -67,13 +68,12 @@ def opf_hessfcn(x, lmbda, om, Ybus, Yf, Yt, ppopt, il=None, cost_mult=1.0):
     """
     ##----- initialize -----
     ## unpack data
-    ppc = om.get_ppc()
-    baseMVA, bus, gen, branch, gencost = \
-        ppc["baseMVA"], ppc["bus"], ppc["gen"], ppc["branch"], ppc["gencost"]
-    cp = om.get_cost_params()
-    N, Cw, H, dd, rh, kk, mm = \
-        cp["N"], cp["Cw"], cp["H"], cp["dd"], cp["rh"], cp["kk"], cp["mm"]
-    vv, _, _, _ = om.get_idx()
+    # ppc = om.get_ppc()
+    baseMVA, bus, gen, branch, gencost = pack_para[1], pack_para[2], pack_para[3], pack_para[4], pack_para[5]
+    vv = pack_para[7]
+    # cp = om.get_cost_params()
+    N, Cw, H, dd, rh, kk, mm = pack_para[10]
+    # vv, _, _, _ = om.get_idx()
 
     ## unpack needed parameters
     nb = bus.shape[0]          ## number of buses
@@ -157,11 +157,12 @@ def opf_hessfcn(x, lmbda, om, Ybus, Yf, Yt, ppopt, il=None, cost_mult=1.0):
     Gqaa, Gqav, Gqva, Gqvv = d2Sbus_dV2(Ybus, V, lamQ)
 
     d2G = vstack([
-            hstack([
+            hstack([cr_real(
                 vstack([hstack([Gpaa, Gpav]),
-                        hstack([Gpva, Gpvv])]).real +
-                vstack([hstack([Gqaa, Gqav]),
-                        hstack([Gqva, Gqvv])]).imag,
+                        hstack([Gpva, Gpvv])])) +
+                cr_imag(
+                    vstack([hstack([Gqaa, Gqav]),
+                        hstack([Gqva, Gqvv])])),
                 sparse((2 * nb, nxtra))]),
             hstack([
                 sparse((nxtra, 2 * nb)),
@@ -190,10 +191,11 @@ def opf_hessfcn(x, lmbda, om, Ybus, Yf, Yt, ppopt, il=None, cost_mult=1.0):
         dSf_dVa, dSf_dVm, dSt_dVa, dSt_dVm, Sf, St = \
                 dSbr_dV(branch[il,:], Yf, Yt, V)
         if ppopt['OPF_FLOW_LIM'] == 1:     ## real power
-            Hfaa, Hfav, Hfva, Hfvv = d2ASbr_dV2(dSf_dVa.real, dSf_dVm.real,
-                                                Sf.real, Cf, Yf, V, muF)
-            Htaa, Htav, Htva, Htvv = d2ASbr_dV2(dSt_dVa.real, dSt_dVm.real,
-                                                St.real, Ct, Yt, V, muT)
+
+            Hfaa, Hfav, Hfva, Hfvv = d2ASbr_dV2(cr_real(dSf_dVa), cr_real(dSf_dVm),
+                                                cr_real(Sf), Cf, Yf, V, muF)
+            Htaa, Htav, Htva, Htvv = d2ASbr_dV2(cr_real(dSt_dVa), cr_real(dSt_dVm),
+                                                cr_real(St), Ct, Yt, V, muT)
         else:                  ## apparent power
             Hfaa, Hfav, Hfva, Hfvv = \
                     d2ASbr_dV2(dSf_dVa, dSf_dVm, Sf, Cf, Yf, V, muF)

@@ -1,6 +1,9 @@
 import time
 from math import atan2
 from typing import List
+import time
+import matplotlib.pyplot as plt
+import numpy as np
 
 import numpy
 import plotly.graph_objects as go
@@ -30,7 +33,7 @@ def vertex_enumeration_2d(A: numpy.ndarray, b: numpy.ndarray, solver: Solver) ->
     trials = [[i, j] for i in range(num_constrs) for j in range(i + 1, num_constrs)]
     res = map(lambda comb: solver.solve_lp(None, A, b, comb), trials)
     filtered_res = filter(lambda x: x is not None, res)
-    return list(map(lambda x: x.sol, filtered_res))
+    return list(map(lambda x: x.sol, filtered_res))  # 加了[:2]，只取最后两个元素, 删除了. 23-8-7
 
 
 def sort_clockwise(vertices: List[numpy.ndarray]) -> List[numpy.ndarray]:
@@ -94,46 +97,57 @@ def plotly_plot(solution: Solution, save_path: str = None, show=True) -> None:
     if save_path is not None:
         file_tag = str(time.time())
         fig.write_image(save_path + file_tag + ".png")
-        fig.write_html(save_path + file_tag + ".html", include_plotyjs=False, full_html=False)
+        # fig.write_html(save_path + file_tag + ".html", include_plotyjs=False, full_html=False)
 
     if show:
         fig.show()
 
 
-def parametric_plot(solution: Solution, save_path: str = None, show=True) -> None:
-    """
-    Makes a simple plot from a solution. This uses matplotlib to generate a plot, it is the general plotting backend.
-
-    :param solution: a multiparametric solution
-    :param save_path: if specified saves the plot in the directory
-    :param show: Keyword argument, if True displays the plot otherwise does not display
-    :return: no return, creates graph of solution
-    """
-
-    # check if the solution is actually 2 dimensional
-    if solution.theta_dim() != 2:
-        print(f"Solution is not 2D, the dimensionality of the solution is {solution.theta_dim()}")
-        return None
+def parametric_plot(solution: Solution, save_path: str = None, points=None, show=True) -> None:
+    # ... your other code here ...
 
     vertex_list = gen_vertices(solution)
     polygon_list = [Polygon(v) for v in vertex_list]
 
-    _, ax = pyplot.subplots()
+    # 定义一个固定的颜色列表，包含10种颜色
+    color_list = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22',
+                  '#17becf']
 
-    cm = pyplot.cm.get_cmap('Paired')
-    colors = 100 * numpy.random.rand(len(solution.critical_regions))
+    # 使用模运算确定每个多边形的颜色
+    colors = [color_list[i % len(color_list)] for i in range(len(solution.critical_regions))]
 
-    p = PatchCollection(polygon_list, cmap=cm, alpha=.8, edgecolors='black', linewidths=1)
+    # 计算绘图的行数和列数，这只是一个简单的示例，你可以根据你的具体需求调整它
+    total = len(polygon_list)
+    cols = int(np.ceil(np.sqrt(total)))
+    rows = int(np.ceil(total / cols))
 
-    p.set_array(colors)
-    ax.add_collection(p)
-    pyplot.autoscale()
+    fig, axes = plt.subplots(rows, cols, figsize=(15, 15))  # 这里的figsize是一个示例，你可以根据需要进行调整
 
+    # 将2D的axes数组转换为1D，以方便迭代
+    if rows > 1 and cols > 1:
+        axes = axes.ravel()
+    else:
+        axes = [axes]
+
+    for i, (polygon_, ax) in enumerate(zip(polygon_list, axes)):
+        p = PatchCollection(polygon_list[:i + 1], facecolors=colors[:i + 1], alpha=.8, edgecolors='black', linewidths=1)
+        # p.set_array(colors[:i + 1])
+        ax.add_collection(p)
+        if points is not None:
+            for j in range(i+1):
+                ax.scatter(points[j][0], points[j][1], color='black', s=3)
+
+        ax.set_xlim(55, 85)
+        ax.set_ylim(16, 24)
+
+    # 如果保存图像：
     if save_path is not None:
-        pyplot.savefig(save_path + ".png", dpi=1000)
+        plt.savefig(f"{save_path}.png", dpi=1000)
 
+    # 如果要显示图像：
     if show:
-        pyplot.show()
+        plt.show()
+
 
 
 def parametric_plot_1D(solution: Solution, save_path: str = None, show=True) -> None:
@@ -170,3 +184,5 @@ def parametric_plot_1D(solution: Solution, save_path: str = None, show=True) -> 
 
     if show:
         pyplot.show()
+        time.sleep(2)  # Wait for 2 seconds
+        pyplot.close()

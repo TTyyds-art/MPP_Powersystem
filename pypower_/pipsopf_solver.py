@@ -10,8 +10,10 @@
 
 """Solves AC optimal power flow using PIPS.
 """
+import numpy
+from cupy import ones, zeros, Inf, pi, exp, conj, r_, asarray, flatnonzero as find
 
-from numpy import flatnonzero as find, ones, zeros, Inf, pi, exp, conj, r_
+from pypower_.csr_real_imag import csr_imag
 from pypower_.idx_brch import F_BUS, T_BUS, RATE_A, PF, QF, PT, QT, MU_SF, MU_ST
 from pypower_.idx_bus import BUS_TYPE, REF, VM, VA, MU_VMAX, MU_VMIN, LAM_P, LAM_Q
 from pypower_.idx_cost import MODEL, PW_LINEAR, NCOST
@@ -25,9 +27,13 @@ from pypower_.opf_costfcn import opf_costfcn
 from pypower_.opf_hessfcn import opf_hessfcn
 from pypower_.pips import pips
 
+import warnings
+warnings.filterwarnings("ignore")
 
-def pipsopf_solver(om, ppopt,x0_init=None, out_opt=None):
-    """Solves AC optimal power flow using PIPS.
+
+
+def pipsopf_solver_gpu(om, ppopt, x0_init=None, out_opt=None):
+    """Solves AC optimal power flow using PIPS in GPUs only.
 
     Inputs are an OPF model object, a PYPOWER options vector and
     a dict containing keys (can be empty) for each of the desired
@@ -91,28 +97,43 @@ def pipsopf_solver(om, ppopt,x0_init=None, out_opt=None):
              'max_it': max_it,
              'max_red': max_red,
              'step_control': step_control,
-             'cost_mult': 1e-4,
+             'cost_mult': 1,
              'verbose': verbose  }
 
     ## unpack data
     ppc = om.get_ppc()
     baseMVA, bus, gen, branch, gencost = \
-        ppc["baseMVA"], ppc["bus"], ppc["gen"], ppc["branch"], ppc["gencost"]
+        asarray(ppc["baseMVA"]), asarray(ppc["bus"]), asarray(ppc["gen"]), \
+                            asarray(ppc["branch"]), asarray(ppc["gencost"])
     vv, _, nn, _ = om.get_idx()
-
+    # vv, nn = asarray(vv), asarray(nn)
     ## problem dimensions
-    nb = bus.shape[0]          ## number of buses
-    nl = branch.shape[0]       ## number of branches
-    ny = om.getN('var', 'y')   ## number of piece-wise linear costs
+    nb = bus.shape[0]          ## int: number of buses
+    nl = branch.shape[0]       ## int: number of branches
+    ny = om.getN('var', 'y')   ## int: number of piece-wise linear costs
 
     ## linear constraints
     A, l, u = om.linear_constraints()
+    if isinstance(A, numpy.ndarray):
+        A = asarray(A)
+    if isinstance(l, numpy.ndarray):
+        l = asarray(l)
+    if isinstance(u, numpy.ndarray):
+        u = asarray(u)
+
 
     ## bounds on optimization vars
     x0, xmin, xmax = om.getv()
+    x0, xmin, xmax = asarray(x0), asarray(xmin), asarray(xmax)
 
     ## build admittance matrices
     Ybus, Yf, Yt = makeYbus(baseMVA, bus, branch)
+    if 'cupy' not in str(type(Ybus)):
+        raise ValueError('Ybus must be a cupy array')
+    if 'cupy' not in str(type(Yf)):
+        raise ValueError('Yf must be a cupy array')
+    if 'cupy' not in str(type(Yt)):
+        raise ValueError('Yt must be a cupy array')
 
     ## try to select an interior initial point if init is not available from a previous powerflow
     if init != "pf":
@@ -139,10 +160,17 @@ def pipsopf_solver(om, ppopt,x0_init=None, out_opt=None):
     il = find((branch[:, RATE_A] != 0) & (branch[:, RATE_A] < 1e10))
     nl2 = len(il)           ## number of constrained lines
 
+
+    cp = om.get_cost_params()
+    N, Cw, H, dd, rh, kk, mm = \
+        cp["N"], cp["Cw"], cp["H"], cp["dd"], cp["rh"], cp["kk"], cp["mm"]
+    cp = (N, Cw, H, dd, rh, kk, mm)
+    pack_para = (ppc, baseMVA, bus, gen, branch, gencost, il, vv, nn, ny, cp)
+
     ##-----  run opf  -----
-    f_fcn = lambda x, return_hessian=False: opf_costfcn(x, om, return_hessian)
-    gh_fcn = lambda x: opf_consfcn(x, om, Ybus, Yf[il, :], Yt[il,:], ppopt, il)
-    hess_fcn = lambda x, lmbda, cost_mult: opf_hessfcn(x, lmbda, om, Ybus, Yf[il, :], Yt[il, :], ppopt, il, cost_mult)
+    f_fcn = lambda x, return_hessian=False: opf_costfcn(x, pack_para, return_hessian)
+    gh_fcn = lambda x: opf_consfcn(x, pack_para, Ybus, Yf[il, :], Yt[il,:], ppopt, il)
+    hess_fcn = lambda x, lmbda, cost_mult: opf_hessfcn(x, lmbda, pack_para, Ybus, Yf[il, :], Yt[il, :], ppopt, il, cost_mult)
 
     solution = pips(f_fcn, x0, A, l, u, xmin, xmax, gh_fcn, hess_fcn, opt)
     x, f, info, lmbda, output = solution["x"], solution["f"], \

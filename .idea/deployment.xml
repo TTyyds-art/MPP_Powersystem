@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" autoUpload="Always" serverName="huzuntao@10.113.162.250:22:3 password" remoteFilesAllowedToDisappearOnAutoupload="false" autoUploadExternalChanges="true">
+    <serverData>
+      <paths name="huzuntao@10.113.162.250:22:3 password">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/huzuntao/PycharmProjects/MPP_Powersystem" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="yc17469@umac.mo@10.113.160.207:22 password">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/yc17469/PycharmProject/MPP_Powersystem" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="yc17469@umac.mo@10.113.160.207:22 password (2)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/yc17469/PycharmProject/MPP_Powersystem" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="yc17469@umac.mo@10.113.160.207:22 password (3)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/yc17469/PycharmProject/MPP_Powersystem" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+    </serverData>
+    <option name="myAutoUpload" value="ALWAYS" />
+  </component>
+</project>

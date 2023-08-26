@@ -5,8 +5,8 @@
 """Computes total cost for generators at given output level.
 """
 
-from numpy import zeros, arange
-from numpy import flatnonzero as find
+from cupy import zeros, arange
+from cupy import flatnonzero as find
 
 from pypower_.polycost import polycost
 from pypower_.idx_cost import PW_LINEAR, POLYNOMIAL, COST, NCOST, MODEL

@@ -5,21 +5,27 @@
 """Evaluates nonlinear constraints and their Jacobian for OPF.
 """
 
-from numpy import zeros, ones, conj, exp, r_, Inf, arange
+# from numpy import zeros, ones, conj, exp, r_, Inf, arange
+from cupy import zeros, ones, conj, exp, Inf, arange, r_
+# from cupy import concatenate as r_ # concatenate is similar with np.r_, but the specifics will depend on your use case
 
-from scipy.sparse import lil_matrix, vstack, hstack, csr_matrix as sparse
+# from scipy.sparse import lil_matrix, vstack, hstack, csr_matrix as sparse
+from cupyx.scipy.sparse import vstack, hstack, csr_matrix as sparse
 
-from pandapower.pypower.idx_gen import GEN_BUS, PG, QG
-from pandapower.pypower.idx_brch import F_BUS, T_BUS, RATE_A
+from pypower_.idx_gen import GEN_BUS, PG, QG
+from pypower_.idx_brch import F_BUS, T_BUS, RATE_A
 
-from pandapower.pypower.makeSbus import makeSbus
-from pandapower.pypower.dSbus_dV import dSbus_dV
-from pandapower.pypower.dIbr_dV import dIbr_dV
-from pandapower.pypower.dSbr_dV import dSbr_dV
-from pandapower.pypower.dAbr_dV import dAbr_dV
+# 所有的函数都需要转换成Cupy的
+from pypower_.makeSbus import makeSbus
+from pypower_.dSbus_dV import dSbus_dV
+from pypower_.dIbr_dV import dIbr_dV
+from pypower_.dSbr_dV import dSbr_dV
+from pypower_.dAbr_dV import dAbr_dV
+
+from pypower_.csr_real_imag import csr_real, csr_imag, cr_real, cr_imag
 
 
-def opf_consfcn(x, om, Ybus, Yf, Yt, ppopt, il=None, *args):
+def opf_consfcn(x, pack_para, Ybus, Yf, Yt, ppopt, il=None, *args):
     """Evaluates nonlinear constraints and their Jacobian for OPF.
 
     Constraint evaluation function for AC optimal power flow, suitable
@@ -52,23 +58,22 @@ def opf_consfcn(x, om, Ybus, Yf, Yt, ppopt, il=None, *args):
     ##----- initialize -----
 
     ## unpack data
-    ppc = om.get_ppc()
-    baseMVA, bus, gen, branch = \
-        ppc["baseMVA"], ppc["bus"], ppc["gen"], ppc["branch"]
-    vv, _, _, _ = om.get_idx()
+
+    baseMVA, bus, gen, branch = pack_para[1], pack_para[2], pack_para[3], pack_para[4]
+    vv = pack_para[7]
 
     ## problem dimensions
-    nb = bus.shape[0]          ## number of buses
-    nl = branch.shape[0]       ## number of branches
-    ng = gen.shape[0]          ## number of dispatchable injections
-    nxyz = len(x)              ## total number of control vars of all types
+    nb = bus.shape[0]          ## int: number of buses
+    nl = branch.shape[0]       ## int: number of branches
+    ng = gen.shape[0]          ## int: number of dispatchable injections
+    nxyz = len(x)              ## int: total number of control vars of all types
 
     ## set default constrained lines
     if il is None:
         il = arange(nl)         ## all lines have limits by default
-    nl2 = len(il)              ## number of constrained lines
-
-    ## grab Pg & Qg
+    nl2 = len(il)              ## int: number of constrained lines
+    #
+    # grab Pg & Qg
     Pg = x[vv["i1"]["Pg"]:vv["iN"]["Pg"]]  ## active generation in p.u.
     Qg = x[vv["i1"]["Qg"]:vv["iN"]["Qg"]]  ## reactive generation in p.u.
 
@@ -86,7 +91,7 @@ def opf_consfcn(x, om, Ybus, Yf, Yt, ppopt, il=None, *args):
     V = Vm * exp(1j * Va)
 
     ## evaluate power flow equations
-    mis = V * conj(Ybus * V) - Sbus
+    mis = V * (Ybus * V).conj() - Sbus
     # print(f"V: {V}; Ybus: {Ybus}; Ybus*V: {Ybus * V}")
 
     ##----- evaluate constraint function values -----
@@ -101,22 +106,23 @@ def opf_consfcn(x, om, Ybus, Yf, Yt, ppopt, il=None, *args):
         if ppopt['OPF_FLOW_LIM'] == 2:       ## current magnitude limit, |I|
             If = Yf * V
             It = Yt * V
-            h = r_[ If * conj(If) - flow_max,     ## branch I limits (from bus)
-                    It * conj(It) - flow_max ].real    ## branch I limits (to bus)
+            h =  r_[ If * If.conj() - flow_max,     ## branch I limits (from bus)
+                    It * It.conj() - flow_max ].real   ## branch I limits (to bus)
         else:
             ## compute branch power flows
             ## complex power injected at "from" bus (p.u.)
-            Sf = V[ branch[il, F_BUS].astype(int) ] * conj(Yf * V)
+            Sf = V[ branch[il, F_BUS].astype(int) ] * (Yf * V).conj()
             ## complex power injected at "to" bus (p.u.)
-            St = V[ branch[il, T_BUS].astype(int) ] * conj(Yt * V)
+            St = V[ branch[il, T_BUS].astype(int) ] * (Yt * V).conj()
             if ppopt['OPF_FLOW_LIM'] == 1:   ## active power limit, P (Pan Wei)
-                h = r_[ Sf.real**2 - flow_max,   ## branch P limits (from bus)
-                        St.real**2 - flow_max ]  ## branch P limits (to bus)
+                h = r_[ csr_real(Sf)**2 - flow_max,   ## branch P limits (from bus)
+                        csr_real(St)**2 - flow_max ]  ## branch P limits (to bus)
             else:                ## apparent power limit, |S|
-                h = r_[ Sf * conj(Sf) - flow_max, ## branch S limits (from bus)
-                        St * conj(St) - flow_max ].real  ## branch S limits (to bus)
+                h = cr_real(
+                    r_[ Sf * Sf.conj() - flow_max, ## branch S limits (from bus)
+                        St * St.conj() - flow_max ])  ## branch S limits (to bus)
     else:
-        h = zeros((0,1))
+        h = zeros((0, 1))
 
     ##----- evaluate partials of constraints -----
     ## index ranges
@@ -129,16 +135,16 @@ def opf_consfcn(x, om, Ybus, Yf, Yt, ppopt, il=None, *args):
     ## compute partials of injected bus powers
     dSbus_dVm, dSbus_dVa = dSbus_dV(Ybus, V)           ## w.r.t. V
     ## Pbus w.r.t. Pg, Qbus w.r.t. Qg
-    neg_Cg = sparse((-ones(ng), (gen[:, GEN_BUS], range(ng))), (nb, ng))
+    neg_Cg = sparse((-ones(ng), (gen[:, GEN_BUS], arange(ng))), (nb, ng))
 
     ## construct Jacobian of equality constraints (power flow) and transpose it
-    dg = lil_matrix((2 * nb, nxyz))
+    dg = sparse(zeros((2 * nb, nxyz)))
     blank = sparse((nb, ng))
     dg[:, iVaVmPgQg] = vstack([
             ## P mismatch w.r.t Va, Vm, Pg, Qg
-            hstack([dSbus_dVa.real, dSbus_dVm.real, neg_Cg, blank]),
+            hstack([csr_real(dSbus_dVa), csr_real(dSbus_dVm), neg_Cg, blank]),
             ## Q mismatch w.r.t Va, Vm, Pg, Qg
-            hstack([dSbus_dVa.imag, dSbus_dVm.imag, blank, neg_Cg])
+            hstack([cr_imag(dSbus_dVa), cr_imag(dSbus_dVm), blank, neg_Cg])
         ], "csr")
     dg = dg.T
 
@@ -151,12 +157,12 @@ def opf_consfcn(x, om, Ybus, Yf, Yt, ppopt, il=None, *args):
             dFf_dVa, dFf_dVm, dFt_dVa, dFt_dVm, Ff, Ft = \
                     dSbr_dV(branch[il, :], Yf, Yt, V)
         if ppopt['OPF_FLOW_LIM'] == 1:     ## real part of flow (active power)
-            dFf_dVa = dFf_dVa.real
-            dFf_dVm = dFf_dVm.real
-            dFt_dVa = dFt_dVa.real
-            dFt_dVm = dFt_dVm.real
-            Ff = Ff.real
-            Ft = Ft.real
+            dFf_dVa = csr_real(dFf_dVa)
+            dFf_dVm = csr_real(dFf_dVm)
+            dFt_dVa = csr_real(dFt_dVa)
+            dFt_dVm = csr_real(dFt_dVm)
+            Ff = csr_real(Ff)
+            Ft = csr_real(Ft)
 
         ## squared magnitude of flow (of complex power or current, or real power)
         df_dVa, df_dVm, dt_dVa, dt_dVm = \
@@ -164,7 +170,7 @@ def opf_consfcn(x, om, Ybus, Yf, Yt, ppopt, il=None, *args):
 
         ## construct Jacobian of inequality constraints (branch limits)
         ## and transpose it.
-        dh = lil_matrix((2 * nl2, nxyz))
+        dh = sparse(zeros((2 * nl2, nxyz)))
         dh[:, r_[iVa, iVm].T] = vstack([
                 hstack([df_dVa, df_dVm]),    ## "from" flow limit
                 hstack([dt_dVa, dt_dVm])     ## "to" flow limit

@@ -5,16 +5,16 @@
 """Evaluates objective function, gradient and Hessian for OPF.
 """
 
-from numpy import array, ones, zeros, arange, r_, dot, flatnonzero as find
-from scipy.sparse import issparse, csr_matrix as sparse
+from cupy import array, ones, zeros, asarray, arange, r_, dot, flatnonzero as find
+from cupyx.scipy.sparse import issparse, csr_matrix as sparse
 
-from pandapower.pypower.idx_cost import MODEL, POLYNOMIAL
+from pypower_.idx_cost import MODEL, POLYNOMIAL
 
-from pandapower.pypower.totcost import totcost
-from pandapower.pypower.polycost import polycost
+from pypower_.totcost import totcost
+from pypower_.polycost import polycost
 
 
-def opf_costfcn(x, om, return_hessian=False):
+def opf_costfcn(x, pack_para, return_hessian=False):
     """Evaluates objective function, gradient and Hessian for OPF.
 
     Objective function evaluation routine for AC optimal power flow,
@@ -22,7 +22,8 @@ def opf_costfcn(x, om, return_hessian=False):
     gradient and Hessian.
 
     @param x: optimization vector
-    @param om: OPF model object
+    @param pack_para: ppc, baseMVA, bus, gen, branch, gencost, il, vv, nn, ny, cp
+    @subparam cp: N, Cw, H, dd, rh, kk, mm
 
     @return: C{F} - value of objective function. C{df} - (optional) gradient
     of objective function (column vector). C{d2f} - (optional) Hessian of
@@ -36,17 +37,17 @@ def opf_costfcn(x, om, return_hessian=False):
     """
     ##----- initialize -----
     ## unpack data
-    ppc = om.get_ppc()
-    baseMVA, gen, gencost = ppc["baseMVA"], ppc["gen"], ppc["gencost"]
-    cp = om.get_cost_params()
-    N, Cw, H, dd, rh, kk, mm = \
-        cp["N"], cp["Cw"], cp["H"], cp["dd"], cp["rh"], cp["kk"], cp["mm"]
-    vv, _, _, _ = om.get_idx()
+
+    baseMVA, gen, gencost = pack_para[1], pack_para[3], pack_para[5]
+    N, Cw, H, dd, rh, kk, mm = pack_para[10]
+    vv = pack_para[7]
 
     ## problem dimensions
     ng = gen.shape[0]          ## number of dispatchable injections
-    ny = om.getN('var', 'y')   ## number of piece-wise linear costs
-    nxyz = len(x)              ## total number of control vars of all types
+    ny = pack_para[9]   ## number of piece-wise linear costs
+    nxyz = len(x)       ## total number of control vars of all types
+
+    # TODO: same as in opf_consfcn, should be in CuPy
 
     ## grab Pg & Qg
     Pg = x[vv["i1"]["Pg"]:vv["iN"]["Pg"]]  ## active generation in p.u.
@@ -59,7 +60,7 @@ def opf_costfcn(x, om, return_hessian=False):
     ipol = find(gencost[:, MODEL] == POLYNOMIAL)   ## poly MW and MVAr costs
     xx = r_[ Pg, Qg ] * baseMVA
     if len(ipol)>0:
-        f = sum( totcost(gencost[ipol, :], xx[ipol]) )  ## cost of poly P or Q
+        f = sum( asarray(totcost(gencost[ipol, :], xx[ipol])) )  ## cost of poly P or Q
     else:
         f = 0
 
@@ -74,8 +75,8 @@ def opf_costfcn(x, om, return_hessian=False):
 
     ##----- evaluate cost gradient -----
     ## index ranges
-    iPg = range(vv["i1"]["Pg"], vv["iN"]["Pg"])
-    iQg = range(vv["i1"]["Qg"], vv["iN"]["Qg"])
+    iPg = arange(vv["i1"]["Pg"], vv["iN"]["Pg"])
+    iQg = arange(vv["i1"]["Qg"], vv["iN"]["Qg"])
 
     ## polynomial cost of P and Q
     df_dPgQg = zeros(2 * ng)        ## w.r.t p.u. Pg and Qg

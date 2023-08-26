@@ -5,8 +5,8 @@
 """Builds the vector of complex bus power injections.
 """
 
-from numpy import ones, flatnonzero as find
-from scipy.sparse import csr_matrix as sparse
+from cupy import ones, arange, flatnonzero as find
+from cupyx.scipy.sparse import csr_matrix as sparse
 
 from pypower_.idx_bus import PD, QD
 from pypower_.idx_gen import GEN_BUS, PG, QG, GEN_STATUS
@@ -30,7 +30,7 @@ def makeSbus(baseMVA, bus, gen):
     nb = bus.shape[0]
     ngon = on.shape[0]
     ## connection matrix, element i, j is 1 if gen on(j) at bus i is ON
-    Cg = sparse((ones(ngon), (gbus, range(ngon))), (nb, ngon))
+    Cg = sparse((ones(ngon), (gbus, arange(ngon))), (nb, ngon))
 
     ## power injected by gens plus power injected by loads converted to p.u.
     Sbus = ( Cg * (gen[on, PG] + 1j * gen[on, QG]) -

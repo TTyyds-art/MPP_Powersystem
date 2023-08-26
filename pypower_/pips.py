@@ -11,13 +11,22 @@
 """Python Interior Point Solver (PIPS).
 """
 
-from numpy import array, Inf, any, isnan, ones, r_, finfo, \
-    zeros, dot, absolute, log, flatnonzero as find
-from numpy.linalg import norm
-from pandapower.pypower.pipsver import pipsver
-from scipy.sparse import vstack, hstack, eye, csr_matrix as sparse
-from scipy.sparse.linalg import spsolve
+# from numpy import array, Inf, any, isnan, ones, r_, finfo, \
+#     zeros, dot, absolute, log, flatnonzero as find
+# from numpy.linalg import norm
 
+# from scipy.sparse import vstack, hstack, eye, csr_matrix as sparse
+# from scipy.sparse.linalg import spsolve
+from cupy import array, Inf, any, isnan, ones, r_, finfo, \
+    zeros, dot, absolute, log, arange
+from cupy import flatnonzero as find
+from cupy import asarray
+from cupy.linalg import norm
+
+from cupyx.scipy.sparse import vstack, hstack, eye, csr_matrix as sparse
+from cupyx.scipy.sparse.linalg import spsolve
+
+from pandapower.pypower.pipsver import pipsver
 
 EPS = finfo(float).eps
 
@@ -187,8 +196,8 @@ def pips(f_fcn, x0=None, A=None, l=None, u=None, xmin=None, xmax=None,
         if 'A' in p: A = p['A']
     # print(f"isinstance(f_fcn, dict): {isinstance(f_fcn, dict)}; x0 shape: {x0.shape}")
 
-    nx = x0.shape[0]                        # number of variables
-    nA = A.shape[0] if A is not None else 0 # number of original linear constr
+    nx = x0.shape[0]                       # int: number of variables
+    nA = A.shape[0] if A is not None else 0 # int: number of original linear constr
 
     # default argument values
     if l is None or len(l) == 0: l = -Inf * ones(nA)
@@ -253,7 +262,7 @@ def pips(f_fcn, x0=None, A=None, l=None, u=None, xmin=None, xmax=None,
     ilt = find( (ll <= -1e10) & (uu <  1e10) )
     ibx = find( (absolute(uu - ll) > EPS) & (uu < 1e10) & (ll > -1e10) )
     # zero-sized sparse matrices unsupported
-    print(f'ieq_: {ieq};AA shape: {AA.shape}')
+    # print(f'ieq_: {ieq};AA shape: {AA.shape}')
     Ae = AA[ieq, :] if len(ieq) else None
     if len(ilt) or len(igt) or len(ibx):
         idxs = [(1, ilt), (-1, igt), (1, ibx), (-1, ibx)]
@@ -263,6 +272,7 @@ def pips(f_fcn, x0=None, A=None, l=None, u=None, xmin=None, xmax=None,
     be = uu[ieq]
     bi = r_[uu[ilt], -ll[igt], uu[ibx], -ll[ibx]]
 
+    # TODO: the following function requrires be in cupy
     # evaluate cost f(x0) and constraints g(x0), h(x0)
     x = x0
     f, df = f_fcn(x)                 # cost
@@ -297,13 +307,13 @@ def pips(f_fcn, x0=None, A=None, l=None, u=None, xmin=None, xmax=None,
         dg = None if Ae is None else Ae.T     # 1st derivative of equalities
 
     # some dimensions
-    neq = g.shape[0]           # number of equality constraints
-    niq = h.shape[0]           # number of inequality constraints
-    neqnln = gn.shape[0]       # number of nonlinear equality constraints
-    niqnln = hn.shape[0]       # number of nonlinear inequality constraints
-    nlt = len(ilt)             # number of upper bounded linear inequalities
-    ngt = len(igt)             # number of lower bounded linear inequalities
-    nbx = len(ibx)             # number of doubly bounded linear inequalities
+    neq = g.shape[0]           # int: number of equality constraints
+    niq = h.shape[0]           # int: number of inequality constraints
+    neqnln = gn.shape[0]       # int: number of nonlinear equality constraints
+    niqnln = hn.shape[0]       # int: number of nonlinear inequality constraints
+    nlt = len(ilt)             # int: number of upper bounded linear inequalities
+    ngt = len(igt)             # int: number of lower bounded linear inequalities
+    nbx = len(ibx)             # int: number of doubly bounded linear inequalities
 
     # initialize gamma, lam, mu, z, e
     gamma = 1                  # barrier coefficient
@@ -381,9 +391,9 @@ def pips(f_fcn, x0=None, A=None, l=None, u=None, xmin=None, xmax=None,
         else:
             _, _, d2f = f_fcn(x, True)      # cost
             Lxx = d2f * opt["cost_mult"]
-        rz = range(len(z))
+        rz = arange(len(z))
         zinvdiag = sparse((1.0 / z, (rz, rz))) if len(z) else None
-        rmu = range(len(mu))
+        rmu = arange(len(mu))
         mudiag = sparse((mu, (rmu, rmu))) if len(mu) else None
         dh_zinv = None if dh is None else dh * zinvdiag
         M = Lxx if dh is None else Lxx + dh_zinv * mudiag * dh.T

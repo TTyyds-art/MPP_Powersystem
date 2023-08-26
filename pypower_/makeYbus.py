@@ -7,7 +7,7 @@
 
 from sys import stderr
 
-from numpy import ones, conj, nonzero, any, exp, pi, r_
+from numpy import ones, conj, nonzero, any, exp, pi, r_, array, arange
 from scipy.sparse import csr_matrix
 
 from pypower_.idx_bus import BUS_I, GS, BS
@@ -32,7 +32,7 @@ def makeYbus(baseMVA, bus, branch):
     nl = branch.shape[0]  ## number of lines
 
     ## check that bus numbers are equal to indices to bus (one set of bus nums)
-    if any(bus[:, BUS_I] != list(range(nb))):
+    if any(array(bus[:, BUS_I]) != array(list(range(nb)))):
         stderr.write('buses must appear in order by bus number\n')
 
     ## for each branch, compute the elements of the branch admittance matrix where
@@ -66,13 +66,13 @@ def makeYbus(baseMVA, bus, branch):
     f = branch[:, F_BUS]  ## list of "from" buses
     t = branch[:, T_BUS]  ## list of "to" buses
     ## connection matrix for line & from buses
-    Cf = csr_matrix((ones(nl), (range(nl), f)), (nl, nb))
+    Cf = csr_matrix((ones(nl), (arange(nl), f)), (nl, nb))
     ## connection matrix for line & to buses
-    Ct = csr_matrix((ones(nl), (range(nl), t)), (nl, nb))
+    Ct = csr_matrix((ones(nl), (arange(nl), t)), (nl, nb))
 
     ## build Yf and Yt such that Yf * V is the vector of complex branch currents injected
     ## at each branch's "from" bus, and Yt is the same for the "to" bus end
-    i = r_[range(nl), range(nl)]  ## double set of row indices
+    i = r_[arange(nl), arange(nl)]  ## double set of row indices
 
     Yf = csr_matrix((r_[Yff, Yft], (i, r_[f, t])), (nl, nb))
     Yt = csr_matrix((r_[Ytf, Ytt], (i, r_[f, t])), (nl, nb))
@@ -81,6 +81,6 @@ def makeYbus(baseMVA, bus, branch):
 
     ## build Ybus
     Ybus = Cf.T * Yf + Ct.T * Yt + \
-           csr_matrix((Ysh, (range(nb), range(nb))), (nb, nb))
+           csr_matrix((Ysh, (arange(nb), arange(nb))), (nb, nb))
 
     return Ybus, Yf, Yt

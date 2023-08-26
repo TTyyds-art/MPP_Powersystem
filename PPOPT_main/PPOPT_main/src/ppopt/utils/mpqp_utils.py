@@ -79,7 +79,6 @@ def build_suboptimal_critical_region(program: MPQCQP_Program, active_set: List[i
     return region_A, region_b
 
 
-# noinspection PyUnusedLocal TODO 19.22.29 使这部分能工作；
 def gen_cr_from_active_set(program: MPQCQP_Program, active_set: List[int], check_full_dim=True) -> Optional[
     CriticalRegion]:
     """
@@ -101,7 +100,8 @@ def gen_cr_from_active_set(program: MPQCQP_Program, active_set: List[int], check
     lambda_A, lambda_b = -lagrange_A[num_equality:], lagrange_b[num_equality:]  #
 
     # Theta(loads) Constraints
-    omega_A, omega_b = program.A_t, program.b_t
+    omega_A, omega_b = program.A_t, program.b_t.squeeze()
+    omega_b = numpy.expand_dims(omega_b, axis=1)  #该omega_b本来是不增加维度的，但报错。所以在上面加queeze(),在此加expand_dims()
 
     # Inactive Constraints remain inactive; 这里的 program.A/b 都是不等式约束，没有等式约束
     inactive_A = program.A[inactive] @ parameter_A - program.F[inactive]
@@ -120,11 +120,12 @@ def gen_cr_from_active_set(program: MPQCQP_Program, active_set: List[int], check
     inactive_bnz = inactive_b[ineq_nonzeros]
 
     CR_A = ppopt_block([[lambda_Anz], [inactive_Anz], [omega_A]])
-    CR_b = ppopt_block([[numpy.expand_dims(lambda_bnz, axis=1)], [numpy.expand_dims(inactive_bnz, axis=1)], [omega_b]]) #  使得每个matrix都是2D的
+    CR_b = ppopt_block([[numpy.expand_dims(lambda_bnz, axis=1)], [numpy.expand_dims(inactive_bnz, axis=1)],
+                        [omega_b]]) # 使每个matrix都是2D的
 
     CR_As, CR_bs = scale_constraint(CR_A, CR_b)
 
-    # if check_full_dim is set check if region is lower dimensional if so return None TODO 21.11.06 这里的check_full_dim需要调整后才能用（后期）
+    # if check_full_dim is set check if region is lower dimensional if so return None
     # if check_full_dim:
     #     # if the resulting system is not fully dimensional return None
     #     A_temp = numpy.ones_like(CR_As)*10

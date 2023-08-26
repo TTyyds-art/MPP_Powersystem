@@ -9,6 +9,7 @@ from .mplp_program import MPLP_Program
 from .mpqp_program import MPQP_Program
 from .mpmiqp_program import MPMIQP_Program
 from .mpmilp_program import MPMILP_Program
+from .mpQCQP_program_0731 import MPQCQP_Program
 from .utils.general_utils import make_column
 
 
@@ -16,7 +17,7 @@ from .utils.general_utils import make_column
 class Solution:
     """The Solution object is the output of multiparametric solvers, it contains all the critical regions as well
     as holds a copy of the original problem that was solved. """
-    program: Union[MPLP_Program, MPQP_Program, MPMIQP_Program, MPMILP_Program]
+    program: Union[MPLP_Program, MPQP_Program, MPMIQP_Program, MPMILP_Program, MPQCQP_Program]
     critical_regions: List[CriticalRegion]
 
     def __init__(self, program: Union[MPLP_Program, MPQP_Program], critical_regions: List[CriticalRegion],

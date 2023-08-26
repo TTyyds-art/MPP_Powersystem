@@ -64,7 +64,7 @@ my_QCQP = MPQCQP_Program(net=net)
 
 n_constrs = my_QCQP.num_constraints()
 n_eq = my_QCQP.num_equality_constraints()
-n_theta = my_QCQP.num_t() # correct
+n_theta = my_QCQP.num_t()  # correct
 n_variables = my_QCQP.num_x()
 print(f'There are {n_constrs} constraints, where {n_eq} are equalities;'
       f'\nThere are {n_variables} variables and {n_theta} parameters.')
@@ -97,7 +97,6 @@ def full_process(program: MPQCQP_Program, active_set: List[int], murder_list, ge
 
     This is the fundamental building block of the parallel combinatorial algorithm, here we branch off of a known feasible active set combination\\
     and then
-
 
     :param program: A multiparametric program
     :param active_set: the active set combination that we are expanding on
@@ -142,7 +141,7 @@ num_cores = num_cpu_cores()
 
 print(f'Spawned threads across {num_cores}')
 
-pool = Pool(32)  # to 64, compare the time consumption TODO
+pool = Pool(num_cores/2)  # to 64, compare the time consumption TODO
 
 murder_list = CombinationTester()
 to_check = list()

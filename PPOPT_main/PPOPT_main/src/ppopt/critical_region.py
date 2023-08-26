@@ -55,13 +55,13 @@ class CriticalRegion:
         """Evaluates x(θ) = Aθ + b."""
 
         if self.y_fixation is not None:
-            cont_vars = self.A @ theta + self.b
+            cont_vars = self.A @ theta + numpy.expand_dims(self.b, axis=1)
             x_star = numpy.zeros((len(self.x_indices) + len(self.y_indices),))
             x_star[self.x_indices] = cont_vars.flatten()
             x_star[self.y_indices] = self.y_fixation
             return x_star.reshape(-1, 1)
         else:
-            return self.A @ theta + self.b
+            return self.A @ theta + numpy.expand_dims(self.b, axis=1) # 2023.8.2 加了 squeeze
 
     def lagrange_multipliers(self, theta: numpy.ndarray) -> numpy.ndarray:
         """Evaluates λ(θ) = Cθ + d."""
@@ -69,7 +69,7 @@ class CriticalRegion:
 
     def is_inside(self, theta: numpy.ndarray) -> numpy.ndarray:
         """Tests if point θ is inside the critical region."""
-        return numpy.all(self.E @ theta - self.f < 0)
+        return numpy.all(self.E @ theta - self.f < 0)   #  改成 <= 0 了 2023.8.2；改回 < 0 23.8.8
 
     # depreciated
     def is_full_dimension(self) -> bool:

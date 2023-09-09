@@ -35,25 +35,25 @@ import pandapower.converter as tb
 # Load MATPOWER case
 net = tb.from_mpc('/home/huzuntao/PycharmProjects/MPP_Powersystem/PPOPT_main/PPOPT_main/src/ppopt/cases/pglib_opf_case3_lmbd.mat')
 pp.runopp(net, verbose=False)
-print(net.res_bus[:3])
+# print(net.res_bus[:3])
 
 p_load_o = net.res_load.p_mw.values
 q_load_o = net.res_load.q_mvar.values
 num_load = len(p_load_o)
 # %%
 new_QCQP = MPQCQP_Program(net=net, lb_loads=r_[p_load_o[:], q_load_o[:]]*0.8, ub_loads=r_[p_load_o[:], q_load_o[:]]*1.2)
-print(f"load: {net.load.p_mw}")
-# 处理输出的排列顺序；
-temp_1 = np.squeeze(net.res_bus)  # 获得net计算后的结果 23-08-01
-print(f"bus: \n{temp_1}")
+# print(f"load: {net.load.p_mw}")
+# # 处理输出的排列顺序；
+# temp_1 = np.squeeze(net.res_bus)  # 获得net计算后的结果 23-08-01
+# print(f"bus: \n{temp_1}")
 #
 # 生成当前的critical region
 mu_ = new_QCQP.raw['lmbda']['mu']
 idx_act = find(mu_> 1e-3).tolist() # 修改成了 1e-3, 因为对互补性的阈值是1e-6，阈值=z*mu/(1+max(x)) => z*mu<5e-6;mu>1e-3能够保证z<1e-3
 cri_region = gen_cr_from_active_set(new_QCQP, active_set=idx_act)    # 生成当前的critical region
 #
-print(f"cri_region.E = \n{cri_region.E}")
-print(f"cri_region.f = \n{cri_region.f}")
+# print(f"cri_region.E = \n{cri_region.E}")
+# print(f"cri_region.f = \n{cri_region.f}")
 
 p_load_new = p_load_init = net.load.p_mw.copy()
 q_load_new = q_load_init = net.load.q_mvar.copy()
@@ -78,7 +78,7 @@ while flag_load:
         print('pq_load is inside the current critical region.')
         x_mpp = cri_region.evaluate(pq_load)    # 获得由MPP计算而来的结果， 也就是x_mpp
         # x_mpp 是由[V,W, P, Q]组成的，而且是按照net的顺序排列的。 输出P和Q
-        print(f'x = {x_mpp.reshape(len(x_mpp))[:]}.')
+        print(f'x = {x_mpp.reshape(len(x_mpp), -1)[:]}.')
 
 # 对于新的pq_load, 获得基于pandpower的结果
 net.load.p_mw = p_load_new

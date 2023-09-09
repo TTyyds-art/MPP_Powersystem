@@ -1,3 +1,4 @@
+import math
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -192,6 +193,7 @@ def gen_cr_from_active_set_torch(batch_data: Dict[str, torch.Tensor], keep_ineq_
     active_set = batch_data['idx_act']  # 将tensor转换为list
     num_ineq_conts = batch_data['num_ineq_conts']
     pq_load = batch_data['pq_load']
+    x_init = batch_data['x_0']
 
     if keep_ineq_indices is None:
         keep_ineq_indices = [i for i in range(num_ineq_conts[0])]  # keep_ineq_indices是一个list
@@ -224,6 +226,55 @@ def gen_cr_from_active_set_torch(batch_data: Dict[str, torch.Tensor], keep_ineq_
     inactive_A_torch = A_inact @ parameter_A - F_inact # inactive的索引需要处理
     inactive_b_torch = b_inact.unsqueeze(2) - A_inact @ parameter_b
 
+    #  # TODO 下面的9行代码，都是torch.Tensor，且维度是(batch_size, n, n)，需逐一处理
+
+    lamba_nonzeros = [i for i, t in enumerate(lambda_A_torch) if numpy.nonzero(t)[0].shape[0] > 0]
+    ineq_nonzeros = [i for i, t in enumerate(inactive_A_torch) if numpy.nonzero(t)[0].shape[0] > 0]
+
+    # Block of all critical region constraints
+
+    lambda_Anz = lambda_A_torch[lamba_nonzeros]
+    lambda_bnz = lambda_b_torch[lamba_nonzeros]
+
+    inactive_Anz = inactive_A_torch[ineq_nonzeros]
+    inactive_bnz = inactive_b_torch[ineq_nonzeros]
+
+    CR_As_batch = ppopt_block_torch([[lambda_Anz], [inactive_Anz], [omega_A_torch]])
+    CR_bs_batch = ppopt_block_torch([[lambda_bnz], [inactive_bnz], [omega_b_torch]])
+    CR_As_batch, CR_bs_batch = scale_constraint_torch(CR_As_batch, CR_bs_batch)
+
+    # 处理I, I的维度是 (batch_size, n, n)
+    ## 下面只是一个有LP问题，要通过修改I创建多个LP问题，并行求解
+    num_batch = int(num_tot_batch / batch_size)
+    #
+    all_idx = torch.empty([0, CR_As_batch.shape[1]], device=device)
+    for len_divi_batch in range(math.ceil(CR_As_batch.shape[1] / num_batch)):  # 所有的不等式分成num_batch个
+        CR_As_batch_exp_tot = torch.empty([0, CR_As_batch.shape[1], CR_As_batch.shape[2]], device=device)
+        for i in range(len_divi_batch, len_divi_batch + num_batch):  # 对每个batch，增加一个I
+            if i >= CR_As_batch.shape[1]:  # 如果i超过了CR_As_batch的维度，就break该for循环
+                break
+            I_n = torch.eye(n=CR_As_batch.shape[0], m=CR_As_batch.shape[1], device=device)
+            I_n[:, i, i] = 0
+            CR_As_batch_exp = torch.cat([CR_As_batch, I_n], dim=2)
+            CR_As_batch_exp_tot = torch.cat([CR_As_batch_exp_tot, CR_As_batch_exp], dim=0)  # 在维度0上重叠num_batch次
+
+        # 处理c: c对应x的系数是 0.001，对应不等式间隙theta的系数是 -1
+        batch_size_temp = CR_As_batch_exp_tot.shape[0]
+        c_batch_x = torch.ones([batch_size_temp, CR_As_batch.shape[2], 1], device=device) * 0.001
+        c_batch = torch.cat([c_batch_x, -torch.ones([batch_size_temp, CR_As_batch.shape[1], 1], device=device)], dim=1)
+        # CR_bs_batch_tot = CR_bs_batch 在维度0上重叠num_batch次
+        CR_bs_batch_tot = CR_bs_batch.repeat(num_batch, 1, 1)  #
+        x_init_tot = x_init.repeat(num_batch, 1, 1)
+
+        # 输出是x_idx: (batch_size, 1)
+        x_idx = physarum_solve(CR_As_batch_exp_tot, CR_bs_batch_tot, c_batch, x=x_init_tot, step_size=0.001,
+                               max_iter=100)
+        all_idx = torch.cat([all_idx, x_idx], dim=1)
+
+    kept_lambda_indices = [index for index in all_idx[:len(lamba_nonzeros)] if index is not None]
+    kept_inequality_indices = [index for index in all_idx[len(lamba_nonzeros):len(lamba_nonzeros) + len(ineq_nonzeros)]
+                               if index is not None]
+    kept_omega_indices = [index for index in all_idx[len(lamba_nonzeros) + len(ineq_nonzeros):] if index is not None]
 
     # if it is fully dimensional we get to classify the constraints and then reduce them (important)!
     to_numpy = lambda x: x.cpu().detach().numpy()
@@ -250,7 +301,7 @@ def gen_cr_from_active_set_torch(batch_data: Dict[str, torch.Tensor], keep_ineq_
         CR_bs_batch = ppopt_block([[lambda_bnz], [inactive_bnz], [omega_b_batch]])
         CR_As_batch, CR_bs_batch = scale_constraint(CR_As_batch, CR_bs_batch)
 
-        # 开始时间
+         # 开始时间
         start_time = time.time()
         with ThreadPoolExecutor(max_workers=6) as executor:
             args_list = [(CR_As_batch, CR_bs_batch, i, 0) for i in range(len(lamba_nonzeros))]
@@ -345,7 +396,7 @@ def optimal_control_law_torch(batch_data, active_set: List[int] = None) -> Tuple
     M = torch.cat([
         torch.cat([batch_data['Lxx'], dg_eq, dh_iq_ac], dim=2),
         torch.cat([torch.cat([dg_eq.permute(0, 2, 1), -(mu_b * dh_iq_ac.permute(0, 2, 1))], dim=1), torch.zeros((batch_size, n_c, n_c)).to(device)], dim=2)
-    ], dim=1)  # M 的维度是 (n_x + n_c, n_x + n_c); z = [x, mu, labda[active_set]]; n_z = n_x + n_c #TODO 0519 加M的公式(次要)
+    ], dim=1)  # M 的维度是 (n_x + n_c, n_x + n_c); z = [x, mu, labda[active_set]]; n_z = n_x + n_c #
 
     inverse_M = pinv(M)
 
@@ -381,7 +432,7 @@ def optimal_control_law_torch(batch_data, active_set: List[int] = None) -> Tuple
     x_0 = batch_data['x_0']
     Pd_load, Qd_load = torch.gather(Pd, 1, idx_load), torch.gather(Qd, 1, idx_load)
     b_x = x_0.unsqueeze(2) - A_x @ torch.cat([Pd_load, Qd_load], dim=1).unsqueeze(2)
-    b_l = torch.cat([labda, mu_act], dim=1).unsqueeze(2) - A_l @ torch.cat([Pd_load, Qd_load], dim=1).unsqueeze(2)  # TODO 注意 active_set 的长度是变化的
+    b_l = torch.cat([labda, mu_act], dim=1).unsqueeze(2) - A_l @ torch.cat([Pd_load, Qd_load], dim=1).unsqueeze(2)  #
 
     return A_x, b_x, A_l, b_l
 
@@ -576,7 +627,7 @@ def is_full_dimensional(A, b, solver: Solver = None):
     if solver is None:
         solver = Solver()
 
-    # TODO: Add second chebychev ball to get a more accurate estimate of lower dimensionality
+    #
 
     soln = chebyshev_ball(A, b, deterministic_solver=solver.solvers['lp'])
 

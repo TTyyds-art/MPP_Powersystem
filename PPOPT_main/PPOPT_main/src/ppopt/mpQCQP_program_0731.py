@@ -790,7 +790,10 @@ class MPQCQP_Program():
         if net is not None:
 
             self.net = net
-            self.om, self.ppopt, self.raw = pp.runopp(net, delta=1e-16, RETURN_RAW_DER=1)  # solve the OPF problem
+            try:
+                self.om, self.ppopt, self.raw = pp.runopp(net, delta=1e-16, RETURN_RAW_DER=1)  # solve the OPF problem
+            except:
+                pass
         else:
             raise Exception("The input is not a net object built on the PandaPower.")
             # print()

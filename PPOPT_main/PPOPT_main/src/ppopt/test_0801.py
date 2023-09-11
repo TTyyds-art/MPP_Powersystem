@@ -1,14 +1,8 @@
 import pandapower as pp
 import warnings
-import time
 import numpy as np
-from numpy import flatnonzero as find, ones, zeros, Inf, pi, exp, conj, r_
-from PPOPT_main.PPOPT_main.src.ppopt.mp_solvers.solver_utils import \
-    generate_children_sets, CombinationTester
-from PPOPT_main.PPOPT_main.src.ppopt.solution import Solution
-from multiprocessing.pool import ThreadPool as Pool
+from numpy import flatnonzero as find, zeros, r_
 
-from typing import List
 import sys, os
 path_current = '/home/huzuntao/PycharmProjects/MPP_Powersystem/'
 path_ = os.getcwd()
@@ -17,10 +11,9 @@ if path_current not in sys.path:
 elif path_ not in sys.path:
     sys.path.insert(1, path_)
 
-from PPOPT_main.PPOPT_main.src.ppopt.mpQCQP_program_0731 import MPQCQP_Program
-from PPOPT_main.PPOPT_main.src.ppopt.critical_region import CriticalRegion
-from PPOPT_main.PPOPT_main.src.ppopt.utils.mpqp_utils import gen_cr_from_active_set
-# from PPOPT_main.PPOPT_main.src.ppopt.utils.general_utils import num_cpu_cores
+from ppopt_main.PPOPT_main.src.ppopt.mpQCQP_program_0731 import MPQCQP_Program
+from ppopt_main.PPOPT_main.src.ppopt.utils.mpqp_utils import gen_cr_from_active_set
+# from ppopt_main.ppopt_main.src.ppopt.utils.general_utils import num_cpu_cores
 
 
 # 设定输出警告信息的方式

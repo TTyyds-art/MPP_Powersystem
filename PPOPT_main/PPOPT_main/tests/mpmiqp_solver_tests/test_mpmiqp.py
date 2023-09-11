@@ -4,7 +4,6 @@ import numpy
 
 from src.ppopt.mpmilp_program import MPMILP_Program
 from src.ppopt.mp_solvers.solve_mpmiqp import solve_mpmiqp
-from tests.test_fixtures import simple_mpMILP, simple_mpMIQP
 
 
 def test_mpmilp_process_constraints(simple_mpMILP):

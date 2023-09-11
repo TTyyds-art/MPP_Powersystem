@@ -1,32 +1,22 @@
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 import numpy
-from numpy import array, Inf, any, isnan, ones, r_, finfo, \
-    zeros, dot, absolute, log, flatnonzero as find
-from numpy.linalg import norm
-from pandapower.pypower.pipsver import pipsver
-from scipy.sparse import vstack, hstack, eye, csr_matrix as sparse
-from scipy.sparse.linalg import spsolve
+from numpy import any, finfo, \
+    absolute
 from scipy.linalg import pinv
+from scipy.sparse import vstack, hstack, eye
 
 EPS = finfo(float).eps  # 为变量EPS赋值为float类型的最小正数精度值
 infi = float('inf')
-import os.path
-import sys
-import pandapower.networks as pn
 import pandapower as pp
-import pandas as pd
 import gurobipy as gp
 from gurobipy import GRB
-from numpy import flatnonzero as find, ones, zeros, Inf, pi, exp, conj, r_, arange, array
+from numpy import flatnonzero as find, ones, zeros, Inf, pi, exp, conj, r_, arange
 from pypower__.makeYbus import makeYbus
-from pypower__.idx_brch import F_BUS, T_BUS, RATE_A, PF, QF, PT, QT, MU_SF, MU_ST
-from pypower__.idx_gen import GEN_BUS, PG, QG
-from pypower__.idx_cost import MODEL, PW_LINEAR, NCOST, POLYNOMIAL
+from pypower__.idx_brch import F_BUS, T_BUS, RATE_A
+from pypower__.idx_cost import MODEL, POLYNOMIAL
 from pypower__.totcost import totcost
-from pypower__.makeSbus import makeSbus
-from pypower__.idx_bus import BUS_TYPE, REF, VM, VA, MU_VMAX, MU_VMIN, LAM_P, LAM_Q
-import cvxpy as cp
+from pypower__.idx_bus import BUS_TYPE, REF, VM, VA
 import numpy as np
 from scipy.sparse import csr_matrix as sparse
 from pypower__.idx_bus import PD, QD
@@ -41,7 +31,7 @@ if path_current not in sys.path:
 elif path_ not in sys.path:
     sys.path.insert(1, path_)
 
-from PPOPT_main.PPOPT_main.src.ppopt.solver import Solver
+from ppopt_main.src.ppopt.solver import Solver
 
 # from .mplp_program import MPLP_Program
 # from .solver_interface.solver_interface import SolverOutput

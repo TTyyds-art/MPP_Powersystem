@@ -6,11 +6,9 @@ import warnings
 import time, torch
 import numpy as np
 from numpy import flatnonzero as find, r_
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 
 from openpyxl import Workbook
-import os
-from PPOPT_main.PPOPT_main.src.ppopt.solution import Solution
 
 import sys, os
 path_current = '/home/huzuntao/PycharmProjects/MPP_Powersystem/'
@@ -20,9 +18,7 @@ if path_current not in sys.path:
 elif path_ not in sys.path:
     sys.path.insert(1, path_)
 
-from PPOPT_main.PPOPT_main.src.ppopt.mpQCQP_program_0731 import MPQCQP_Program
-from PPOPT_main.PPOPT_main.src.ppopt.utils.mpqp_utils_torch import gen_cr_from_active_set_torch, \
-    optimal_control_law_torch
+from ppopt_main.PPOPT_main.src.ppopt.mpQCQP_program_0731 import MPQCQP_Program
 
 # 设定输出警告信息的方式
 warnings.filterwarnings("ignore")  # 忽略掉所有警告

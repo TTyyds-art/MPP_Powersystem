@@ -1,21 +1,17 @@
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from typing import Dict
 from typing import List, Optional, Tuple, Iterable
 
-import numpy
-from typing import Dict
 import gurobipy as gp
-from gurobipy import GRB
-from multiprocessing import Pool
-
+import numpy
 import torch
+from gurobipy import GRB
 from torch import zeros, ones
 from torch.linalg import pinv
-from torch.utils.data import DataLoader
 
 from .chebyshev_ball import chebyshev_ball
-from .physarum_solver import physarum_solve
 from ..critical_region import CriticalRegion
 from ..mpQCQP_program import MPQCQP_Program
 from ..solver import Solver

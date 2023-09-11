@@ -1,13 +1,15 @@
 # %% 0. 导入所需的包
-import pandapower as pp
-import warnings
+import os
+import sys
 import time
+import warnings
+
 import numpy as np
 from numpy import flatnonzero as find, r_
+from ppopt_main.PPOPT_main.src.ppopt.solution import Solution
 
-from PPOPT_main.PPOPT_main.src.ppopt.solution import Solution
+import pandapower as pp
 
-import sys, os
 path_current = '/home/huzuntao/PycharmProjects/MPP_Powersystem/'
 path_ = os.getcwd()
 if path_current not in sys.path:
@@ -15,8 +17,8 @@ if path_current not in sys.path:
 elif path_ not in sys.path:
     sys.path.insert(1, path_)
 
-from PPOPT_main.PPOPT_main.src.ppopt.mpQCQP_program_0731 import MPQCQP_Program
-from PPOPT_main.PPOPT_main.src.ppopt.utils.mpqp_utils import gen_cr_from_active_set
+from ppopt_main.PPOPT_main.src.ppopt.mpQCQP_program_0731 import MPQCQP_Program
+from ppopt_main.PPOPT_main.src.ppopt.utils.mpqp_utils import gen_cr_from_active_set
 
 # 设定输出警告信息的方式
 warnings.filterwarnings("ignore")  # 忽略掉所有警告

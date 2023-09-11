@@ -1,18 +1,17 @@
 import time
-from math import atan2
 from typing import List
-import time
-import matplotlib.pyplot as plt
-import numpy as np
 
+import matplotlib.pyplot as plt
 import numpy
+import numpy as np
 import plotly.graph_objects as go
-from .solver import Solver
+from math import atan2
 from matplotlib import pyplot
 from matplotlib.collections import PatchCollection
 from matplotlib.patches import Polygon
 
 from .solution import Solution
+from .solver import Solver
 from .utils.general_utils import make_column
 
 

@@ -1,9 +1,9 @@
-from src.ppopt.solver_interface.gurobi_solver_interface import solve_qp_gurobi, solve_lp_gurobi
-from src.ppopt.solver_interface.cvxopt_interface import solve_lp_cvxopt
-from src.ppopt.solver_interface.quad_prog_interface import solve_qp_quadprog
 import random
 
 import numpy
+from src.ppopt.solver_interface.cvxopt_interface import solve_lp_cvxopt
+from src.ppopt.solver_interface.gurobi_solver_interface import solve_qp_gurobi, solve_lp_gurobi
+from src.ppopt.solver_interface.quad_prog_interface import solve_qp_quadprog
 
 
 def test_lp_consistency():

@@ -4,8 +4,12 @@
 ### numpy
 
 import torch
-import torch.nn.functional as F
-import numpy as np
+
+
+def scale_rows(L, b):
+    norm_val = 1.0 / (torch.norm(L, dim=2, keepdim=True))  # 添加一个小的正值以避免除以零
+    return [L * norm_val, b * norm_val]
+
 
 def physarum_solve(A, b, c, x, step_size=1, max_iter = 10):
     '''
@@ -29,9 +33,23 @@ def physarum_solve(A, b, c, x, step_size=1, max_iter = 10):
         xs = x.clone().detach().squeeze(2)
     for i in range(max_iter):
         W_diag = xs / c.squeeze(2)
-        W = torch.diag_embed(W_diag)
+        W = torch.diag_embed(W_diag.float())
         L = torch.matmul(torch.matmul(A, W), torch.transpose(A, 1, 2))
-        p, _ = torch.solve(b, L)  # use torch.gesv to replace torch.solve if below Pytorch1.1
+        # L, b = scale_rows(L, b)
+        # 重新整理print（min,max）
+        print(f"No.{i}\nA_max = {torch.max(A[0])}; A_min = {torch.min(A[0])};xs_max = {torch.max(xs[0])}; xs_min = {torch.min(xs[0])}"
+              f";\n c_max={torch.max(c[0])};c_min={torch.min(c[0])}; W_max = {torch.max(W[0])}; W_min = {torch.min(W[0])};\n"
+              f"L_max = {torch.max(L[0])}; L_min = {torch.min(L[0])}")
+
+        print(f"L_det = {torch.linalg.det(L[0])}\nL_Contition = {torch.linalg.cond(L[0])}")
+        print(f"A_Contition = {torch.linalg.cond(A[0])}")
+        print(f"W_det = {torch.linalg.det(W[0])}\nW_Contition = {torch.linalg.cond(W[0])}")
+        # 打印出完整的L
+        # print(f"L = {L[0]}")
+
+        # print(f"L = {L[0]}")
+
+        p = torch.linalg.solve(L, b)  # use torch.gesv to replace torch.solve if below Pytorch1.1
         q = torch.matmul(torch.matmul(W, torch.transpose(A, 1, 2)), p)
         xs = (1 - step_size) * xs + step_size * q.squeeze(2)
         xs = torch.clamp(xs, min=1e-6, max=1e+4)

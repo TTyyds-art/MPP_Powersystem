@@ -1,12 +1,11 @@
 import copy
+from typing import List, Union
 
 import numpy
-from typing import List, Union
 
 from ..mpmilp_program import MPMILP_Program
 from ..mpmiqp_program import MPMIQP_Program
 from ..utils.constraint_utilities import remove_strongly_redundant_constraints
-from ..critical_region import CriticalRegion
 
 
 class MITree:

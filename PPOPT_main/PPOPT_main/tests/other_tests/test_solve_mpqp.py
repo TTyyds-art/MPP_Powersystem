@@ -1,7 +1,6 @@
 from src.ppopt.mp_solvers.solve_mpqp import solve_mpqp, mpqp_algorithm
 from src.ppopt.plot import parametric_plot
 
-from tests.test_fixtures import qp_problem
 
 def test_solve_mpqp_combinatorial(qp_problem):
     solution = solve_mpqp(qp_problem, mpqp_algorithm.combinatorial)

@@ -23,10 +23,10 @@ from pandapower.pypower.idx_brch import PF, PT, QF, QT, RATE_A, MU_SF, MU_ST
 from pandapower.pypower.idx_cost import MODEL, POLYNOMIAL, PW_LINEAR, NCOST, COST
 
 from pandapower.pypower.util import sub2ind, have_fcn
-#from pandapower.pypower.ipopt_options import ipopt_options
-#from pandapower.pypower.cplex_options import cplex_options
-#from pandapower.pypower.mosek_options import mosek_options
-#from pandapower.pypower.gurobi_options import gurobi_options
+#from pandapower_old.pypower.ipopt_options import ipopt_options
+#from pandapower_old.pypower.cplex_options import cplex_options
+#from pandapower_old.pypower.mosek_options import mosek_options
+#from pandapower_old.pypower.gurobi_options import gurobi_options
 from pandapower.pypower.qps_pypower import qps_pypower
 
 

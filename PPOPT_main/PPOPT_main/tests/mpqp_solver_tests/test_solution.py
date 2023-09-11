@@ -1,7 +1,6 @@
 import numpy
 import pytest
 
-from tests.test_fixtures import blank_solution, filled_solution, region
 
 def test_add_region_1(blank_solution, region):
     assert len(blank_solution.critical_regions) == 0

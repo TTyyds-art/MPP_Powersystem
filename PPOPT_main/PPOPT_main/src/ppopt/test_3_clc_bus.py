@@ -3,28 +3,26 @@ import pandapower as pp
 import warnings
 import time
 import numpy as np
-from numpy import flatnonzero as find, ones, zeros, Inf, pi, exp, conj, r_
-from PPOPT_main.PPOPT_main.src.ppopt.mp_solvers.solver_utils import \
-    generate_children_sets, CombinationTester
-from PPOPT_main.PPOPT_main.src.ppopt.solution import Solution
-from PPOPT_main.PPOPT_main.src.ppopt.plot import plotly_plot
-from PPOPT_main.PPOPT_main.src.ppopt.plot import parametric_plot
+from numpy import flatnonzero as find, ones, Inf, pi, exp, conj, r_
+from ppopt_main.PPOPT_main.src.ppopt.solution import Solution
+from ppopt_main.PPOPT_main.src.ppopt.plot import plotly_plot
+from ppopt_main.PPOPT_main.src.ppopt.plot import parametric_plot
 from multiprocessing.pool import ThreadPool as Pool
 
 from typing import List
 import sys, os
 path_current = '/home/huzuntao/PycharmProjects/MPP_Powersystem/'
-path_current_ = '/home/huzuntao/PycharmProjects/MPP_Powersystem/PPOPT_main/PPOPT_main/src/ppopt/'
+path_current_ = '/home/huzuntao/PycharmProjects/MPP_Powersystem/ppopt_main/ppopt_main/src/ppopt/'
 path_ = os.getcwd()
 if path_current not in sys.path:
     sys.path.insert(1, '/home/huzuntao/PycharmProjects/MPP_Powersystem/')
 elif path_ not in sys.path:
     sys.path.insert(1, path_)
 elif path_current_ not in sys.path:
-    sys.path.insert(1, '/home/huzuntao/PycharmProjects/MPP_Powersystem/PPOPT_main/PPOPT_main/src/ppopt/')
+    sys.path.insert(1, '/home/huzuntao/PycharmProjects/MPP_Powersystem/ppopt_main/ppopt_main/src/ppopt/')
 
-from PPOPT_main.PPOPT_main.src.ppopt.mpQCQP_program_0731 import MPQCQP_Program
-from PPOPT_main.PPOPT_main.src.ppopt.utils.mpqp_utils import gen_cr_from_active_set
+from ppopt_main.PPOPT_main.src.ppopt.mpQCQP_program_0731 import MPQCQP_Program
+from ppopt_main.PPOPT_main.src.ppopt.utils.mpqp_utils import gen_cr_from_active_set
 
 # 设定输出警告信息的方式
 warnings.filterwarnings("ignore")  # 忽略掉所有警告
@@ -33,7 +31,7 @@ warnings.filterwarnings("ignore")  # 忽略掉所有警告
 import pandapower.converter as tb
 # .from_mpc
 # Load MATPOWER case
-net = tb.from_mpc('/home/huzuntao/PycharmProjects/MPP_Powersystem/PPOPT_main/PPOPT_main/src/ppopt/cases/pglib_opf_case3_lmbd.mat')
+net = tb.from_mpc('/home/huzuntao/PycharmProjects/MPP_Powersystem/ppopt_main/ppopt_main/src/ppopt/cases/pglib_opf_case3_lmbd.mat')
 pp.runopp(net, verbose=False)
 # print(net.res_bus[:3])
 
@@ -131,4 +129,4 @@ print(f"The number of critical regions is {len(opf_anly_sol.critical_regions)}")
 # %% 画图
 # for region in opf_anly_sol.critical_regions:
 # parametric_plot(solution=opf_anly_sol, save_path=None)   # 能处理高维的吗, 只能处理2维的
-# '/home/huzuntao/PycharmProjects/MPP_Powersystem/PPOPT_main/PPOPT_main/src/ppopt'
+# '/home/huzuntao/PycharmProjects/MPP_Powersystem/ppopt_main/ppopt_main/src/ppopt'

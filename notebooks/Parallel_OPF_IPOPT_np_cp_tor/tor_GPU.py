@@ -23,7 +23,7 @@ from pypower_pych_gpu.makeYbus import makeYbus
 from pypower_pych_gpu.opf_consfcn import opf_consfcn
 from pypower_pych_gpu.opf_costfcn import opf_costfcn
 
-# from pandapower.pypower.util import sub2ind
+# from pandapower_old.pypower.util import sub2ind
 
 from pypower_pych_gpu.opf_hessfcn import opf_hessfcn
 from pypower_pych_gpu.pips import pips

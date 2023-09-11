@@ -22,7 +22,7 @@ from pypower_.makeYbus import makeYbus
 from pypower_.opf_consfcn import opf_consfcn
 from pypower_.opf_costfcn import opf_costfcn
 
-# from pandapower.pypower.util import sub2ind
+# from pandapower_old.pypower.util import sub2ind
 
 from pypower_.opf_hessfcn import opf_hessfcn
 from pypower_.pips import pips

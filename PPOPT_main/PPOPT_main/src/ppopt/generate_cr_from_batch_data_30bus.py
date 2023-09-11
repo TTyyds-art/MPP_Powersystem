@@ -1,19 +1,18 @@
-import pickle
 import time
-from joblib import dump, load
+from joblib import load
+import time
+
 import numpy as np
 import torch
-from numpy import r_, pi
-from torch.utils.data import DataLoader
-from test_30_bus_torch import QCQPDataset
+from joblib import load
 from numpy import flatnonzero as find
-from pandapower.networks import case118, case30
+from numpy import r_
+
 import pandapower as pp
-from PPOPT_main.PPOPT_main.src.ppopt.solution_torch import SolutionTorch
-from PPOPT_main.PPOPT_main.src.ppopt.mpQCQP_program_0731 import MPQCQP_Program, clear_om
-from PPOPT_main.PPOPT_main.src.ppopt.utils.mpqp_utils_torch import optimal_control_law_torch, \
-    gen_cr_from_active_set_torch
-from PPOPT_main.PPOPT_main.src.ppopt.utils.mpqp_utils import gen_cr_from_active_set_torch_add
+from pandapower.networks import case30
+from ppopt_main.src.ppopt.mpQCQP_program_0731 import MPQCQP_Program
+from ppopt_main.src.ppopt.solution_torch import SolutionTorch
+from ppopt_main.src.ppopt.utils.mpqp_utils import gen_cr_from_active_set_torch_add
 
 # 检查是否存在GPU，如果存在则使用，否则使用CPU
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -160,4 +159,4 @@ for i in range(50000):
         # else:
         #     print(f"No. {in_idx} Error: \n{None}")
 
-dump(loaded_opf_anly_sol, file_path)
+# dump(loaded_opf_anly_sol, file_path)

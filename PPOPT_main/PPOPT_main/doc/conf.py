@@ -12,7 +12,6 @@
 #
 import os
 import sys
-import sphinx_rtd_theme
 
 for x in os.walk("../src"):
     sys.path.insert(0, x[0])

@@ -1,11 +1,10 @@
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import List, Optional, Iterable
 
-import numpy
-from concurrent.futures import ThreadPoolExecutor,ProcessPoolExecutor
 import gurobipy as gp
+import numpy
 from gurobipy import GRB
-from multiprocessing import Pool
 
 from .chebyshev_ball import chebyshev_ball
 from ..critical_region import CriticalRegion
@@ -15,8 +14,7 @@ from ..utils.constraint_utilities import cheap_remove_redundant_constraints, rem
     scale_constraint
 from ..utils.general_utils import ppopt_block
 
-from multiprocessing import set_start_method
-from multiprocessing import get_context
+
 # set_start_method("spawn")
 
 

@@ -1,19 +1,18 @@
 # %% 0. 导入所需的包
 import datetime
-from openpyxl import Workbook
-
-import pandapower as pp
+import os
+import sys
+import time
+import torch
 import warnings
-import time, torch
+
 import numpy as np
 from numpy import flatnonzero as find, r_
+from openpyxl import Workbook
 from torch.utils.data import Dataset, DataLoader
 
-from PPOPT_main.PPOPT_main.src.ppopt.solution import Solution
-
-import sys, os
-
-from PPOPT_main.PPOPT_main.src.ppopt.solution_torch import SolutionTorch
+import pandapower as pp
+from ppopt_main.src.ppopt.solution_torch import SolutionTorch
 
 path_current = '/home/huzuntao/PycharmProjects/MPP_Powersystem/'
 path_ = os.getcwd()
@@ -22,9 +21,8 @@ if path_current not in sys.path:
 elif path_ not in sys.path:
     sys.path.insert(1, path_)
 
-from PPOPT_main.PPOPT_main.src.ppopt.mpQCQP_program_0731 import MPQCQP_Program
-from PPOPT_main.PPOPT_main.src.ppopt.utils.mpqp_utils_torch import gen_cr_from_active_set_torch, \
-    optimal_control_law_torch
+from ppopt_main.src.ppopt.mpQCQP_program_0731 import MPQCQP_Program
+from ppopt_main.src.ppopt.utils.mpqp_utils_torch import gen_cr_from_active_set_torch
 
 # 设定输出警告信息的方式
 warnings.filterwarnings("ignore")  # 忽略掉所有警告
@@ -232,7 +230,7 @@ def main():
     #     sys.exit(0)  # Exit the program
 
     # 加载数据集的时候，需要知道具体的文件名或者使用相同的格式来找到它
-    new_path = 'PPOPT_main/PPOPT_main/src/ppopt/dataset_test_30_bus_torch/dataset_20230826_174101_N4000.pth'
+    new_path = 'ppopt_main/ppopt_main/src/ppopt/dataset_test_30_bus_torch/dataset_20230826_174101_N4000.pth'
     loaded_dataset = torch.load(new_path)
     new_QCQP = MPQCQP_Program(net=net, lb_loads=r_[p_load_init, q_load_init] * 0.8,
                                                             ub_loads=r_[p_load_init, q_load_init] * 1.2)
